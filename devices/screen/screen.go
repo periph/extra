@@ -12,6 +12,7 @@ package screen // import "periph.io/x/extra/devices/screen"
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"image"
 	"image/color"
 	"io"
@@ -38,6 +39,21 @@ func New(l int) *Dev {
 		l:      l,
 		pixels: make([]byte, 3*l),
 	}
+}
+
+func (d *Dev) String() string {
+	return "Screen"
+}
+
+// Halt implements devices.Device.
+//
+// It clears the display so it is not corrupted.
+func (d *Dev) Halt() error {
+	_, err := d.w.Write([]byte("\n\033[0m"))
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // Write accepts a stream of raw RGB pixels and writes it to the console.
@@ -96,3 +112,4 @@ func (d *Dev) refresh() (int, error) {
 }
 
 var _ devices.Display = &Dev{}
+var _ fmt.Stringer = &Dev{}
