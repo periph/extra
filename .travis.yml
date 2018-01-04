@@ -2,7 +2,10 @@ language: go
 sudo: false
 go_import_path: periph.io/x/extra
 go:
-  - 1.8.1
+  - 1.x
+before_install:
+  - sudo apt-get -qq update
+  - sudo apt-get install -y libusb-1.0.0 libusb-dev
 before_script:
   - go get -t -v periph.io/x/extra/...
 script:
