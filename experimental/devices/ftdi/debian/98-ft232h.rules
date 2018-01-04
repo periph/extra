@@ -1,0 +1,12 @@
+# Copyright 2017 The Periph Authors. All rights reserved.
+# Use of this source code is governed under the Apache License, Version 2.0
+# that can be found in the LICENSE file.
+
+# FT232H udev rule file to make it accessible usable as non-root.
+#
+# Put this file into /etc/udev/rules.d/
+# sudo udevadm control --reload-rules
+# sudo udevadm trigger --verbose
+
+# http://www.ftdichip.com/Support/Knowledgebase/index.html?caniuseftdisvidformypr.htm
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0403", MODE="0664", GROUP="plugdev"
