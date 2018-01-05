@@ -11,6 +11,7 @@ import (
 
 func initWindows() error {
 	// https://msdn.microsoft.com/en-us/library/aa394493.aspx
+	var obj interface{}
 	if err := wmi.Query("SELECT * FROM Win32_TemperatureProbe", &obj); err != nil {
 		return err
 	}

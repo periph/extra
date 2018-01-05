@@ -9,7 +9,7 @@ import (
 	"sort"
 	"sync"
 
-	gousb "github.com/kylelemons/gousb/usb"
+	"github.com/google/gousb"
 	"periph.io/x/extra/experimental/conn/usb"
 	"periph.io/x/periph"
 	"periph.io/x/periph/conn"
@@ -18,8 +18,8 @@ import (
 // Desc represents the description of an USB device on an USB bus.
 type Desc struct {
 	ID   usb.ID
-	Bus  uint8
-	Addr uint8
+	Bus  int
+	Addr int
 }
 
 // All returns all the USB devices detected.
@@ -58,7 +58,7 @@ func (d descriptors) Less(i, j int) bool {
 	return d[i].Addr < d[j].Addr
 }
 
-func fromDesc(d *gousb.Descriptor) Desc {
+func fromDesc(d *gousb.DeviceDesc) Desc {
 	return Desc{usb.ID{uint16(d.Vendor), uint16(d.Product)}, d.Bus, d.Address}
 }
 
@@ -76,7 +76,11 @@ type dev struct {
 	desc Desc
 	name string
 	d    *gousb.Device
-	e    gousb.Endpoint
+
+	done func()
+	i    *gousb.Interface
+	in   *gousb.InEndpoint
+	out  *gousb.OutEndpoint
 }
 
 func (d *dev) String() string {
@@ -84,6 +88,7 @@ func (d *dev) String() string {
 }
 
 func (d *dev) Close() error {
+	d.done()
 	return d.d.Close()
 }
 
@@ -95,18 +100,22 @@ func (d *dev) Duplex() conn.Duplex {
 	return conn.Full
 }
 
+func (d *dev) Read(b []byte) (int, error) {
+	return d.in.Read(b)
+}
+
 func (d *dev) Write(b []byte) (int, error) {
-	return d.e.Write(b)
+	return d.out.Write(b)
 }
 
 func (d *dev) Tx(w, r []byte) error {
-	if _, err := d.e.Write(w); err != nil {
+	if _, err := d.Write(w); err != nil {
 		return err
 	}
 	if len(r) == 0 {
 		return nil
 	}
-	_, err := d.e.Read(r)
+	_, err := d.Read(r)
 	return err
 }
 
@@ -216,7 +225,7 @@ func scanDevices(m map[usb.ID]usb.Opener) error {
 	ctx := gousb.NewContext()
 	defer ctx.Close()
 	all = nil
-	devs, err := ctx.ListDevices(func(d *gousb.Descriptor) bool {
+	devs, err := ctx.OpenDevices(func(d *gousb.DeviceDesc) bool {
 		// Return true to keep the device open.
 		desc := fromDesc(d)
 		all = append(all, desc)
@@ -228,7 +237,7 @@ func scanDevices(m map[usb.ID]usb.Opener) error {
 	// If the user needs root access, LIBUSB_ERROR_ACCESS (-3) will be returned.
 	sort.Sort(all)
 	for _, d := range devs {
-		desc := fromDesc(d.Descriptor)
+		desc := fromDesc(d.Desc)
 		name, err := d.GetStringDescriptor(1)
 		if err != nil {
 			// Sometimes the USB device will return junk, default to the vendor and
@@ -236,13 +245,26 @@ func scanDevices(m map[usb.ID]usb.Opener) error {
 			name = desc.ID.String()
 		}
 		// Control, isochronous or bulk?
-		e, err := d.OpenEndpoint(1, 0, 0, 1|uint8(gousb.ENDPOINT_DIR_IN))
+		i, done, err := d.DefaultInterface()
 		if err != nil {
 			log.Printf("Open: %v", err)
 			d.Close()
 			continue
 		}
-		if err := m[desc.ID](&dev{desc, name, d, e}); err != nil {
+		in, err := i.InEndpoint(0)
+		if err != nil {
+			log.Printf("InEndpoint: %v", err)
+			d.Close()
+			continue
+		}
+		out, err := i.OutEndpoint(0)
+		if err != nil {
+			log.Printf("OutEndpoint: %v", err)
+			d.Close()
+			continue
+		}
+
+		if err := m[desc.ID](&dev{desc: desc, name: name, d: d, done: done, i: i, in: in, out: out}); err != nil {
 			log.Printf("opener: %v", err)
 			d.Close()
 			continue
