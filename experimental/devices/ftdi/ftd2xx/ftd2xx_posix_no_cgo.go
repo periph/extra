@@ -7,26 +7,34 @@
 
 package ftd2xx
 
-import (
-	"errors"
-)
+import "periph.io/x/extra/experimental/devices/ftdi"
 
-func openEx(arg1 uintptr, flags uint32) (Handle, error) {
-	return 0, errors.New("ftd2xx: can't be used without cgo")
+// Library functions.
+
+func getLibraryVersion() (uint8, uint8, uint8) {
+	return 0, 0, 0
 }
 
-func closeHandle(h Handle) error {
-	return errors.New("ftd2xx: can't be used without cgo")
+func createDeviceInfoList() (int, int) {
+	return 0, noCGO
 }
 
-func getDeviceInfo(h Handle, i *DevInfo) error {
-	return errors.New("ftd2xx: can't be used without cgo")
+/*
+func getDeviceInfoList(num int) ([]ftdi.Info, int) {
+	return nil, noCGO
+}
+*/
+
+// Device functions.
+
+func open(i int) (handle, int) {
+	return 0, noCGO
 }
 
-func createDeviceInfoList() (int, error) {
-	return 0, errors.New("ftd2xx: can't be used without cgo")
+func closeHandle(h handle) int {
+	return noCGO
 }
 
-func getDeviceInfoList(num int) ([]DevInfo, error) {
-	return nil, errors.New("ftd2xx: can't be used without cgo")
+func getInfo(h handle, i *ftdi.Info) int {
+	return noCGO
 }

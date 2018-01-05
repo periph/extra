@@ -49,6 +49,9 @@ runtime.
 
 ## Included driver license
 
+- ftd2xx.h is v2.12.28
+- WinTypes.h is v1.4.6
+
 > This software is provided by Future Technology Devices International Limited
 > ``as is'' and any express or implied warranties, including, but not limited
 > to, the implied warranties of merchantability and fitness for a particular
@@ -75,5 +78,6 @@ runtime.
 
 ### Modifications
 
+- Fixed ftd2xx.h to UTF-8
 - Converted header files from CRLF to LF
 - Removed trailing spaces and tabs

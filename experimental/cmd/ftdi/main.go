@@ -18,22 +18,21 @@ import (
 	"periph.io/x/periph/host"
 )
 
-func process(r *ftdi.Ref) {
-	fmt.Printf("%#v\n", r)
-	h, err := r.Open()
-	if err != nil {
-		fmt.Printf("ERROR: %v\n", err)
-		return
-	}
-	fmt.Printf("%#v\n", h)
-	var d ftd2xx.DevInfo
-	if err = h.DevInfo(&d); err != nil {
-		fmt.Printf("ERROR: %v\n", err)
-	}
-	fmt.Printf("%#v\n", d)
-	if err = h.Close(); err != nil {
-		fmt.Printf("ERROR: %v\n", err)
-	}
+func process(d ftdi.Dev) {
+	var i ftdi.Info
+	d.GetInfo(&i)
+	fmt.Printf("  Type:           %s\n", i.Type)
+	fmt.Printf("  Vendor ID:      %#04x\n", i.VenID)
+	fmt.Printf("  Product ID:     %#04x\n", i.ProductID)
+	fmt.Printf("  Manufacturer:   %s\n", i.Manufacturer)
+	fmt.Printf("  ManufacturerID: %s\n", i.ManufacturerID)
+	fmt.Printf("  Desc:           %s\n", i.Desc)
+	fmt.Printf("  Serial:         %s\n", i.Serial)
+	fmt.Printf("  MaxPower:       %dmA\n", i.MaxPower)
+	fmt.Printf("  SelfPowered:    %t\n", i.SelfPowered)
+	fmt.Printf("  RemoteWakeup:   %t\n", i.RemoteWakeup)
+	fmt.Printf("  PullDownEnable: %t\n", i.PullDownEnable)
+	log.Printf("  Full struct:\n%#v\n", i)
 }
 
 func mainImpl() error {
@@ -50,14 +49,20 @@ func mainImpl() error {
 	if _, err := host.Init(); err != nil {
 		return err
 	}
+
+	major, minor, build := ftd2xx.Driver.Version()
+	fmt.Printf("Using library %d.%d.%d\n", major, minor, build)
+	if err := ftdi.RegisterDriver(&ftd2xx.Driver); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+	}
 	all := ftdi.All()
 	plural := ""
 	if len(all) > 1 {
 		plural = "s"
 	}
 	fmt.Printf("Found %d device%s\n", len(all), plural)
-	for _, r := range all {
-		process(&r)
+	for _, d := range all {
+		process(d)
 	}
 	return nil
 }

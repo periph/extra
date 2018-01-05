@@ -5,78 +5,109 @@
 package ftdi
 
 import (
-	"errors"
 	"fmt"
-	"log"
+	"io"
 	"sync"
-	"time"
 
-	"periph.io/x/extra/experimental/devices/ftdi/ftd2xx"
-	"periph.io/x/periph/conn/gpio"
+	"periph.io/x/periph/conn"
 )
 
-// Pin is a pin on a FTDI device.
+// VenID is the vendor ID for official FTDI devices.
+const VenID uint16 = 0x0403
+
+// Info is the information gathered about the connected FTDI device.
 //
-// Pin implements gpio.PinIO.
-type Pin struct {
-	f   string
-	n   string
-	num int
+// Some is gather from USB descriptor, some from the EEPROM if possible.
+type Info struct {
+	// Opened is true if the device was successfully opened.
+	Opened bool
+	// Type is the FTDI device type.
+	//
+	// It has the form "ft232h". An empty string means the type is unknown.
+	Type string
+	// USB descriptor information.
+	VenID     uint16
+	ProductID uint16
+
+	// The remainder is part of EEPROM.
+
+	Manufacturer   string
+	ManufacturerID string
+	Desc           string
+	Serial         string
+
+	MaxPower       uint16 // 0 < MaxPower <= 500
+	SelfPowered    bool   // false if powered by the USB bus
+	RemoteWakeup   bool   //
+	PullDownEnable bool   // true if pull down in suspend enabled
+
+	// FT232H specific data.
+	CSlowSlew         bool  // AC bus pins have slow slew
+	CSchmittInput     bool  // AC bus pins are Schmitt input
+	CDriveCurrent     uint8 // valid values are 4mA, 8mA, 12mA, 16mA
+	DSlowSlew         bool  // non-zero if AD bus pins have slow slew
+	DSchmittInput     bool  // non-zero if AD bus pins are Schmitt input
+	DDriveCurrent     uint8 // valid values are 4mA, 8mA, 12mA, 16mA
+	Cbus0             uint8 // Cbus Mux control
+	Cbus1             uint8 // Cbus Mux control
+	Cbus2             uint8 // Cbus Mux control
+	Cbus3             uint8 // Cbus Mux control
+	Cbus4             uint8 // Cbus Mux control
+	Cbus5             uint8 // Cbus Mux control
+	Cbus6             uint8 // Cbus Mux control
+	Cbus7             uint8 // Cbus Mux control
+	Cbus8             uint8 // Cbus Mux control
+	Cbus9             uint8 // Cbus Mux control
+	FT1248Cpol        bool  // FT1248 clock polarity - clock idle high (true) or clock idle low (false)
+	FT1248Lsb         bool  // FT1248 data is LSB (true), or MSB (false)
+	FT1248FlowControl bool  // FT1248 flow control enable
+	IsFifo            bool  // Interface is 245 FIFO
+	IsFifoTar         bool  // Interface is 245 FIFO CPU target
+	IsFastSer         bool  // Interface is Fast serial
+	IsFT1248          bool  // Interface is FT1248
+	PowerSaveEnable   bool  //
+	DriverType        uint8 //
+
+	// EEPROM is the raw EEPROM data.
+	EEPROM []byte
 }
 
-// String implements pin.Pin.
-func (p *Pin) String() string {
-	return p.n
-}
-
-// Name implements pin.Pin.
-func (p *Pin) Name() string {
-	return p.n
-}
-
-// Number implements pin.Pin.
-func (p *Pin) Number() int {
-	return p.num
-}
-
-// Function implements pin.Pin.
-func (p *Pin) Function() string {
-	return p.f
-}
-
-// In implements gpio.PinIn.
-func (p *Pin) In(pull gpio.Pull, e gpio.Edge) error {
-	return errors.New("ft232h: to be implemented")
-}
-
-// Read implements gpio.PinIn.
-func (p *Pin) Read() gpio.Level {
-	return gpio.Low
-}
-
-// WaitForEdge implements gpio.PinIn.
-func (p *Pin) WaitForEdge(t time.Duration) bool {
-	return false
-}
-
-// Pull implements gpio.PinIn.
-func (p *Pin) Pull() gpio.Pull {
-	return gpio.PullNoChange
-}
-
-// Out implements gpio.PinOut.
-func (p *Pin) Out(l gpio.Level) error {
-	return errors.New("ft232h: to be implemented")
-}
-
-// Dev represents one FT232H device.
+// Dev represents one FTDI device.
 //
-// TODO(maruel): It will eventually be generic.
+// There can be multiple FTDI devices connected to a host.
+type Dev interface {
+	fmt.Stringer
+	conn.Resource
+	GetInfo(i *Info)
+}
+
+// Generic represents a generic FTDI device.
 //
-// There can be multiple devices connected to a host.
-type Dev struct {
-	id int
-	h  ftd2xx.Handle
+// It is used for the models that this package doesn't fully support yet.
+type Generic struct {
+	index int
+	h     Handle // it may be nil if the device couldn't be opened.
+	info  Info
+}
+
+func (g *Generic) String() string {
+	return fmt.Sprintf("ftdi(%d)", g.index)
+}
+
+// Halt implements conn.Resource.
+func (g *Generic) Halt() error {
+	// TODO(maruel): Halt all operations going through this device.
+	return nil
+}
+
+// GetDevInfo returns information about an opened device.
+func (g *Generic) GetInfo(i *Info) {
+	*i = g.info
+}
+
+// FT232H represents a FT232H device.
+type FT232H struct {
+	Generic
 
 	C0 Pin // 21
 	C1 Pin // 25
@@ -98,64 +129,97 @@ type Dev struct {
 	D7 Pin // 20
 }
 
-func (d *Dev) String() string {
-	return fmt.Sprintf("ft232h(%d)", d.id)
-}
-
-// Halt implements conn.Resource.
-func (d *Dev) Halt() error {
-	return nil
-}
-
-func (d *Dev) Close() error {
-	err := d.h.Close()
-	d.h = 0
-	return err
-}
-
-// DevInfo returns information about an opened device.
-func (d *Dev) DevInfo(i *ftd2xx.DevInfo) error {
-	return d.h.GetDevInfo(i)
-}
-
-// Ref is a reference to a FTDI device found on the USB bus but not necessarily
-// yet opened.
-type Ref struct {
-	ID     uint32
-	LocID  uint32
-	Serial string
-	Desc   string
-}
-
-// Open opens a FTDI device.
-func (r *Ref) Open() (*Dev, error) {
-	h, err := ftd2xx.OpenByLocation(r.LocID)
-	if err != nil {
-		return nil, err
-	}
-	return &Dev{h: h}, nil
+func (f *FT232H) String() string {
+	return fmt.Sprintf("ft232h(%d)", f.index)
 }
 
 // All enumerates all the connected FTDI devices.
-func All() []Ref {
+//
+// Some may not be opened; they may already be opened by another process or by
+// a driver included by the operating system.
+//
+// See
+// https://github.com/periph/extra/tree/master/experimental/devices/ftdi/ftd2xx
+func All() []Dev {
 	mu.Lock()
 	defer mu.Unlock()
-	l, err := ftd2xx.ListDevices()
-	if err != nil {
-		log.Printf("ftdi.All(): %v", err)
-		return nil
-	}
-	out := make([]Ref, 0, len(l))
-	for _, v := range l {
-		out = append(out, Ref{ID: v.ID, LocID: v.LocID, Serial: v.Serial, Desc: v.Desc})
-	}
+	out := make([]Dev, len(all))
+	copy(out, all)
 	return out
+}
+
+// Driver is implemented by ftd2xx and eventually by libftdi and ftd3xx.
+type Driver interface {
+	// Version returns the major, minor and build number version of the user mode
+	// library.
+	Version() (uint8, uint8, uint8)
+	// NumDevices returns the number of FTDI devices found on the USB buses.
+	NumDevices() (int, error)
+	// Open opens a device at index i.
+	Open(i int) (Handle, error)
+}
+
+// Handle is implemented by ftd2xx and eventually by libftdi and ftd3xx.
+type Handle interface {
+	// Nobody should normally close the handle.
+	io.Closer
+	// GetInfo returns information about the device.
+	GetInfo(i *Info) error
+	// TODO(maruel): Add operations.
+}
+
+// RegisterDriver registers a driver.
+//
+// Normally this should be &ftd2xx.Driver.
+//
+// Opens all devices found that are not already busy due to another OS provided
+// driver.
+func RegisterDriver(d Driver) error {
+	mu.Lock()
+	defer mu.Unlock()
+	driver = d
+	num, err := driver.NumDevices()
+	if err != nil {
+		return err
+	}
+	for i := 0; i < num; i++ {
+		if d, err1 := open(i); err1 == nil {
+			all = append(all, d)
+		} else {
+			// Create a shallow generic handle.
+			err = err1
+			all = append(all, &Generic{index: i})
+		}
+	}
+	return err
 }
 
 //
 
 var (
-	mu sync.Mutex
+	mu     sync.Mutex
+	driver Driver
+	all    []Dev
+	failed error
 )
 
-var _ gpio.PinIO = &Pin{}
+// open opens a FTDI device.
+//
+// Must be called with mu held.
+func open(i int) (Dev, error) {
+	h, err := driver.Open(i)
+	if err != nil {
+		return nil, err
+	}
+	var info Info
+	if err := h.GetInfo(&info); err != nil {
+		return nil, err
+	}
+	g := Generic{index: i, h: h, info: info}
+	switch info.Type {
+	case "ft232h":
+		return &FT232H{Generic: g}, nil
+	default:
+		return &g, nil
+	}
+}
