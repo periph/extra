@@ -231,7 +231,7 @@ func toErr(s string, e int) error {
 	case 2: // FT_DEVICE_NOT_FOUND
 		return fmt.Errorf("ftd2xx: %s: device not found", s)
 	case 3: // FT_DEVICE_NOT_OPENED
-		return fmt.Errorf("ftd2xx: %s: device not opened", s)
+		return fmt.Errorf("ftd2xx: %s: device busy; see https://github.com/periph/extra/tree/master/experimental/devices/ftdi/ftd2xx for help", s)
 	case 4: // FT_IO_ERROR
 		return fmt.Errorf("ftd2xx: %s: I/O error", s)
 	case 5: // FT_INSUFFICIENT_RESOURCES

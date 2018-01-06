@@ -14,14 +14,8 @@ and install it as an administrator.
 
 ## OSX
 
-On OSX, there is no need to install anything, it will just work as long as the
-following command was run:
-
-```
-sudo kextunload -b com.apple.driver.AppleUSBFTDI
-```
-
-Included driver:
+On OSX, there is no need to install anything as the following driver is
+included, but the OS provided driver gets in the way and must be disabled.
 
 - darwin_amd64/libftd2xx.a v1.4.4
 
@@ -29,22 +23,50 @@ The package is designed to build even if `cgo` is not available but will fail at
 runtime.
 
 
+### Temporary
+
+```
+sudo kextunload -b com.apple.driver.AppleUSBFTDI
+```
+
+
+### Permanently
+
+Figure out, likely run the command above upon all boot?
+
+
 ## Linux
 
-On linux, there is no need to install anything, it will just work as long as the
-following command was run:
-
-```
-sudo modprobe -r ftdi_so usbserial
-```
-
-Included drivers:
+On linux, there is no need to install anything as the following drivers are
+included but the OS provided driver gets in the way and must be disabled.
 
 - linux_arm/libftd2xx.a v1.4.6 with ARMv6 hard float (RPi compatible)
 - linux_amd64/libftd2xx.a v1.4.6
 
 The package is designed to build even if `cgo` is not available but will fail at
 runtime.
+
+
+### Temporary
+
+Run this command after connecting your FTDI device:
+
+```
+sudo modprobe -r ftdi_so usbserial
+```
+
+
+### Permanent
+
+Reconnect your device after running the following command:
+
+```
+cd $GOPATH/src/periph.io/x/extra/experimental/devices/ftdi/ftd2xx
+sudo cp debian/d98-ft232h.rules /etc/udev/rules.d/
+sudo udevadm control --reload-rules
+sudo udevadm trigger --verbose
+```
+
 
 
 ## Included driver license

@@ -8,11 +8,15 @@
 // It currently leverages subpackage ftd2xx but it is designed to be ported to
 // the open source library libftdi.
 //
-// Product
+// Supported products
+//
+// http://www.ftdichip.com/Products/ICs/FT232R.htm
 //
 // http://www.ftdichip.com/Products/ICs/FT232H.htm
 //
-// Datasheet
+// Datasheets
+//
+// http://www.ftdichip.com/Support/Documents/DataSheets/ICs/DS_FT232R.pdf
 //
 // http://www.ftdichip.com/Support/Documents/DataSheets/ICs/DS_FT232H.pdf
 //
