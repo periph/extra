@@ -111,11 +111,22 @@ func getInfo(h handle, i *ftdi.Info) int {
 	eeprom := make([]byte, int(C.EEPROM_MAX_SIZE))
 	eepromVoid := unsafe.Pointer(&eeprom[0])
 	hdr := (*C.FT_EEPROM_HEADER)(eepromVoid)
-	// It must not be set here, while it must be set on Windows. Probably a
-	// difference between v1 and v2.
-	//hdr.deviceType = dev
+
+	// There something odd going on here.
+	//
+	// On a ft232h, we observed that hdr.deviceType MUST NOT be set, but on a
+	// ft232r, it MUST be set. Since we can't know in advance what we must use,
+	// just try both. ¯\_(ツ)_/¯
+	hdr.deviceType = dev
 	if e := C.FT_EEPROM_Read(C.FT_HANDLE(h), eepromVoid, C.DWORD(len(eeprom)), &manufacturer[0], &manufacturerID[0], &desc[0], &serial[0]); e != 0 {
-		return int(e)
+		// FT_INVALID_PARAMETER
+		if e == 6 {
+			hdr.deviceType = 0
+			e = C.FT_EEPROM_Read(C.FT_HANDLE(h), eepromVoid, C.DWORD(len(eeprom)), &manufacturer[0], &manufacturerID[0], &desc[0], &serial[0])
+		}
+		if e != 0 {
+			return int(e)
+		}
 	}
 	i.MaxPower = uint16(hdr.MaxPower)
 	i.SelfPowered = hdr.SelfPowered != 0
@@ -151,6 +162,24 @@ func getInfo(h handle, i *ftdi.Info) int {
 		i.IsFastSer = h.IsFastSer != 0
 		i.IsFT1248 = h.IsFT1248 != 0
 		i.PowerSaveEnable = h.PowerSaveEnable != 0
+		i.DriverType = uint8(h.DriverType)
+	case ft232R:
+		h := (*C.FT_EEPROM_232R)(eepromVoid)
+		i.IsHighCurrent = h.IsHighCurrent != 0
+		i.UseExtOsc = h.UseExtOsc != 0
+		i.InvertTXD = h.InvertTXD != 0
+		i.InvertRXD = h.InvertRXD != 0
+		i.InvertRTS = h.InvertRTS != 0
+		i.InvertCTS = h.InvertCTS != 0
+		i.InvertDTR = h.InvertDTR != 0
+		i.InvertDSR = h.InvertDSR != 0
+		i.InvertDCD = h.InvertDCD != 0
+		i.InvertRI = h.InvertRI != 0
+		i.Cbus0 = uint8(h.Cbus0)
+		i.Cbus1 = uint8(h.Cbus1)
+		i.Cbus2 = uint8(h.Cbus2)
+		i.Cbus3 = uint8(h.Cbus3)
+		i.Cbus4 = uint8(h.Cbus4)
 		i.DriverType = uint8(h.DriverType)
 	default:
 	}

@@ -102,15 +102,35 @@ func getInfo(h handle, i *ftdi.Info) int {
 	var manufacturerID [64]byte
 	var desc [64]byte
 	var serial [64]byte
-	eeprom := make([]byte, eeprom_generic_size)
+	// Shortcuts.
+	m := uintptr(unsafe.Pointer(&manufacturer[0]))
+	mi := uintptr(unsafe.Pointer(&manufacturerID[0]))
+	d := uintptr(unsafe.Pointer(&desc[0]))
+	s := uintptr(unsafe.Pointer(&serial[0]))
+
+	// This data was determined by tracing with a debugger.
+	//
+	// It must not be any other value, like 56 used on posix. ¯\_(ツ)_/¯
+	l := 0
+	switch devType(dev) {
+	case ft232H:
+		l = 44
+	case ft232R:
+		l = 32
+	default:
+		// TODO(maruel): Figure out.
+		l = 56
+	}
+	eeprom := make([]byte, l)
 	eepromVoid := unsafe.Pointer(&eeprom[0])
 	hdr := (*eeprom_header)(eepromVoid)
-	// It must be set here, while it must not be set on Linux. Probably a
-	// difference between v1 and v2.
+	// It MUST be set here. This is not always the case on posix.
 	hdr.deviceType = dev
-	if r1, _, _ := pEEPROMRead.Call(uintptr(h), uintptr(eepromVoid), uintptr(len(eeprom)), uintptr(unsafe.Pointer(&manufacturer[0])), uintptr(unsafe.Pointer(&manufacturerID[0])), uintptr(unsafe.Pointer(&desc[0])), uintptr(unsafe.Pointer(&serial[0]))); r1 != 0 {
+	if r1, _, _ := pEEPROMRead.Call(uintptr(h), uintptr(eepromVoid), uintptr(l), m, mi, d, s); r1 != 0 {
 		return int(r1)
 	}
+
+	// eeprom_header
 	i.MaxPower = uint16(hdr.MaxPower)
 	i.SelfPowered = hdr.SelfPowered != 0
 	i.RemoteWakeup = hdr.RemoteWakeup != 0
@@ -144,6 +164,25 @@ func getInfo(h handle, i *ftdi.Info) int {
 		i.IsFT1248 = h.IsFT1248 != 0
 		i.PowerSaveEnable = h.PowerSaveEnable != 0
 		i.DriverType = uint8(h.DriverType)
+	case ft232R:
+		h := (*eeprom_ft232r)(eepromVoid)
+		i.IsHighCurrent = h.IsHighCurrent != 0
+		i.UseExtOsc = h.UseExtOsc != 0
+		i.InvertTXD = h.InvertTXD != 0
+		i.InvertRXD = h.InvertRXD != 0
+		i.InvertRTS = h.InvertRTS != 0
+		i.InvertCTS = h.InvertCTS != 0
+		i.InvertDTR = h.InvertDTR != 0
+		i.InvertDSR = h.InvertDSR != 0
+		i.InvertDCD = h.InvertDCD != 0
+		i.InvertRI = h.InvertRI != 0
+		i.Cbus0 = uint8(h.Cbus0)
+		i.Cbus1 = uint8(h.Cbus1)
+		i.Cbus2 = uint8(h.Cbus2)
+		i.Cbus3 = uint8(h.Cbus3)
+		i.Cbus4 = uint8(h.Cbus4)
+		i.DriverType = uint8(h.DriverType)
+
 	default:
 	}
 
@@ -170,15 +209,6 @@ var (
 	pGetDeviceInfo *syscall.Proc
 	pEEPROMRead    *syscall.Proc
 )
-
-type eeprom_generic struct {
-	i int
-}
-
-// This data was determined by glancing at the disassembled code.
-//
-// It must not be any other value, like 56 used on posix.
-var eeprom_generic_size = 44
 
 // eeprom_header
 type eeprom_header struct {
@@ -229,6 +259,36 @@ type eeprom_ft232h struct {
 	IsFT1248          uint8 // Interface is FT1248
 	PowerSaveEnable   uint8 //
 	DriverType        uint8 //
+}
+
+type eeprom_ft232r struct {
+	// eeprom_header
+	deviceType     uint32 // FTxxxx device type to be programmed
+	VendorID       uint16 // 0x0403
+	ProductID      uint16 // 0x6001
+	SerNumEnable   uint8  // non-zero if serial number to be used
+	MaxPower       uint16 // 0 < MaxPower <= 500
+	SelfPowered    uint8  // 0 = bus powered, 1 = self powered
+	RemoteWakeup   uint8  // 0 = not capable, 1 = capable
+	PullDownEnable uint8  //
+
+	// ft232r specific.
+	IsHighCurrent uint8
+	UseExtOsc     uint8
+	InvertTXD     uint8
+	InvertRXD     uint8
+	InvertRTS     uint8
+	InvertCTS     uint8
+	InvertDTR     uint8
+	InvertDSR     uint8
+	InvertDCD     uint8
+	InvertRI      uint8
+	Cbus0         uint8 // Cbus Mux control
+	Cbus1         uint8 // Cbus Mux control
+	Cbus2         uint8 // Cbus Mux control
+	Cbus3         uint8 // Cbus Mux control
+	Cbus4         uint8 // Cbus Mux control
+	DriverType    uint8 //
 }
 
 func init() {

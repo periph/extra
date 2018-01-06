@@ -76,6 +76,18 @@ func (h handle) GetInfo(i *ftdi.Info) error {
 	return nil
 }
 
+/* TODO(maruel): Soon!!
+func (h handle) SetBitMode(i int) error {
+	// FT_BITMODE_ASYNC_BITBANG
+	// FT_BITMODE_RESET
+	// FT_SetBitMode(ftHandle, Mask, Mode);
+	// FT_SetBaudRate(ftHandle, baudRate);
+	// FT_Write(ftHandle, &outputData, 1, &bytesWritten)
+	// FT_GetBitMode(ftHandle, &pinStatus)
+	return nil
+}
+*/
+
 //
 
 // devType is the FTDI device type.
@@ -166,7 +178,6 @@ func (d devType) String() string {
 // - FT_VendorCmdGet / FT_VendorCmdSet / FT_VendorCmdGetEx / FT_VendorCmdSetEx
 // USB:
 // - FT_SetLatencyTimer / FT_GetLatencyTimer
-// - FT_SetBitMode / FT_GetBitMode
 // - FT_SetUSBParameters / FT_SetDeadmanTimeout
 // - FT_SetVIDPID / FT_GetVIDPID
 // - FT_StopInTask / FT_RestartInTask
@@ -175,8 +186,36 @@ func (d devType) String() string {
 const missing = -1
 const noCGO = -2
 
-// Baud Rates
-// ...
+const (
+	bitmodeReset        = 0x00 // Reset all Pins to their default value
+	bitmodeAsyncBitbang = 0x01 // Asynchronous bit bang
+	bitmodeMpsse        = 0x02 // MPSSE (ft2232, ft2232h, ft4232h, ft232h)
+	bitmodeSyncBitbang  = 0x04 // Synchronous bit bang (ft232r, ft245r, ft2232, ft2232h, ft4232h and ft232h)
+	bitmodeMcuHost      = 0x08 // MCU host bus emulation (ft2232, ft2232h, ft4232h and ft232h)
+	bitmodeFastSerial   = 0x10 // Fast opto-isolated serial mode (ft2232, ft2232h, ft4232h and ft232h)
+	// In this case, upper nibble controls which pin is output/input, lower
+	// controls which of outputs are high and low.
+	bitmodeCbusBitbang = 0x20 // CBUS bit bang (ft232r and ft232h)
+	bitmodeSyncFifo    = 0x40 // Single Channel Synchronous 245 FIFO mode (ft2232h and ft232h)
+)
+
+// For FT_EE_Program with FT_PROGRAM_DATA.
+const (
+	ft232H_CBusTristate = 0x00 // Tristate
+	ft232H_CBusTxled    = 0x01 // Tx LED
+	ft232H_CBusRxled    = 0x02 // Rx LED
+	ft232H_CBusTxrxled  = 0x03 // Tx and Rx LED
+	ft232H_CBusPwren    = 0x04 // Power Enable
+	ft232H_CBusSleep    = 0x05 // Sleep
+	ft232H_CBusDrive_0  = 0x06 // Drive pin to logic 0
+	ft232H_CBusDrive_1  = 0x07 // Drive pin to logic 1
+	ft232H_CBusIomode   = 0x08 // IO Mode for CBUS bit-bang
+	ft232H_CBusTxden    = 0x09 // Tx Data Enable
+	ft232H_CBusClk30    = 0x0A // 30MHz clock
+	ft232H_CBusClk15    = 0x0B // 15MHz clock
+	ft232H_CBusClk7_5   = 0x0C // 7.5MHz clock
+
+)
 
 func toErr(s string, e int) error {
 	switch e {

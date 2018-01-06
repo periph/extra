@@ -68,6 +68,24 @@ type Info struct {
 	PowerSaveEnable   bool  //
 	DriverType        uint8 //
 
+	// FT232R specific data.
+	IsHighCurrent bool // If interface is high current
+	UseExtOsc     bool // Use External Oscillator
+	InvertTXD     bool // Invert TXD
+	InvertRXD     bool // Invert RXD
+	InvertRTS     bool // Invert RTS
+	InvertCTS     bool // Invert CTS
+	InvertDTR     bool // Invert DTR
+	InvertDSR     bool // Invert DSR
+	InvertDCD     bool // Invert DCD
+	InvertRI      bool // Invert RI
+	//Cbus0         uint8 // Cbus Mux control
+	//Cbus1         uint8 // Cbus Mux control
+	//Cbus2         uint8 // Cbus Mux control
+	//Cbus3         uint8 // Cbus Mux control
+	//Cbus4         uint8 // Cbus Mux control
+	//DriverType    uint8 //
+
 	// EEPROM is the raw EEPROM data.
 	EEPROM []byte
 }
@@ -105,28 +123,42 @@ func (g *Generic) GetInfo(i *Info) {
 	*i = g.info
 }
 
+// FT232R represents a FT232R device.
+type FT232R struct {
+	Generic
+
+	TX  Pin
+	RX  Pin
+	RTS Pin
+	CTS Pin
+	DTR Pin
+	DSR Pin
+	DCD Pin
+	RI  Pin
+}
+
 // FT232H represents a FT232H device.
 type FT232H struct {
 	Generic
 
-	C0 Pin // 21
-	C1 Pin // 25
-	C2 Pin // 26
-	C3 Pin // 27
-	C4 Pin // 28
-	C5 Pin // 29
-	C6 Pin // 30
-	C7 Pin // 31
-	C8 Pin // 32
-	C9 Pin // 33
-	D0 Pin // 13
-	D1 Pin // 14
-	D2 Pin // 15
-	D3 Pin // 16
-	D4 Pin // 17
-	D5 Pin // 18
-	D6 Pin // 19
-	D7 Pin // 20
+	C0 Pin
+	C1 Pin
+	C2 Pin
+	C3 Pin
+	C4 Pin
+	C5 Pin
+	C6 Pin
+	C7 Pin
+	C8 Pin
+	C9 Pin
+	D0 Pin
+	D1 Pin
+	D2 Pin
+	D3 Pin
+	D4 Pin
+	D5 Pin
+	D6 Pin
+	D7 Pin
 }
 
 func (f *FT232H) String() string {
@@ -219,6 +251,8 @@ func open(i int) (Dev, error) {
 	switch info.Type {
 	case "ft232h":
 		return &FT232H{Generic: g}, nil
+	case "ft232r":
+		return &FT232R{Generic: g}, nil
 	default:
 		return &g, nil
 	}

@@ -32,6 +32,52 @@ func process(d ftdi.Dev) {
 	fmt.Printf("  SelfPowered:    %t\n", i.SelfPowered)
 	fmt.Printf("  RemoteWakeup:   %t\n", i.RemoteWakeup)
 	fmt.Printf("  PullDownEnable: %t\n", i.PullDownEnable)
+	switch i.Type {
+	case "ft232h":
+		fmt.Printf("  CSlowSlew:      %t\n", i.CSlowSlew)
+		fmt.Printf("  CSchmittInput:  %t\n", i.CSchmittInput)
+		fmt.Printf("  CDriveCurrent:  %dmA\n", i.CDriveCurrent)
+		fmt.Printf("  DSlowSlew:      %t\n", i.DSlowSlew)
+		fmt.Printf("  DSchmittInput:  %t\n", i.DSchmittInput)
+		fmt.Printf("  DDriveCurrent:  %dmA\n", i.DDriveCurrent)
+		fmt.Printf("  Cbus0:          %#02x\n", i.Cbus0)
+		fmt.Printf("  Cbus1:          %#02x\n", i.Cbus1)
+		fmt.Printf("  Cbus2:          %#02x\n", i.Cbus2)
+		fmt.Printf("  Cbus3:          %#02x\n", i.Cbus3)
+		fmt.Printf("  Cbus4:          %#02x\n", i.Cbus4)
+		fmt.Printf("  Cbus5:          %#02x\n", i.Cbus5)
+		fmt.Printf("  Cbus6:          %#02x\n", i.Cbus6)
+		fmt.Printf("  Cbus7:          %#02x\n", i.Cbus7)
+		fmt.Printf("  Cbus8:          %#02x\n", i.Cbus8)
+		fmt.Printf("  Cbus9:          %#02x\n", i.Cbus9)
+		fmt.Printf("  FT1248Cpol:     %t\n", i.FT1248Cpol)
+		fmt.Printf("  FT1248Lsb:      %t\n", i.FT1248Lsb)
+		fmt.Printf("  FT1248FlowCtrl: %t\n", i.FT1248FlowControl)
+		fmt.Printf("  IsFifo:         %t\n", i.IsFifo)
+		fmt.Printf("  IsFifoTar:      %t\n", i.IsFifoTar)
+		fmt.Printf("  IsFastSer:      %t\n", i.IsFastSer)
+		fmt.Printf("  IsFT1248:       %t\n", i.IsFT1248)
+		fmt.Printf("  PowerSaveEnabl: %t\n", i.PowerSaveEnable)
+		fmt.Printf("  DriverType:     %#02x\n", i.DriverType)
+	case "ft232r":
+		fmt.Printf("  IsHighCurrent:  %t\n", i.IsHighCurrent)
+		fmt.Printf("  UseExtOsc:      %t\n", i.UseExtOsc)
+		fmt.Printf("  InvertTXD:      %t\n", i.InvertTXD)
+		fmt.Printf("  InvertRXD:      %t\n", i.InvertRXD)
+		fmt.Printf("  InvertRTS:      %t\n", i.InvertRTS)
+		fmt.Printf("  InvertCTS:      %t\n", i.InvertCTS)
+		fmt.Printf("  InvertDTR:      %t\n", i.InvertDTR)
+		fmt.Printf("  InvertDSR:      %t\n", i.InvertDSR)
+		fmt.Printf("  InvertDCD:      %t\n", i.InvertDCD)
+		fmt.Printf("  InvertRI:       %t\n", i.InvertRI)
+		fmt.Printf("  Cbus0:          %#02x\n", i.Cbus0)
+		fmt.Printf("  Cbus1:          %#02x\n", i.Cbus1)
+		fmt.Printf("  Cbus2:          %#02x\n", i.Cbus2)
+		fmt.Printf("  Cbus3:          %#02x\n", i.Cbus3)
+		fmt.Printf("  Cbus4:          %#02x\n", i.Cbus4)
+		fmt.Printf("  DriverType:     %#02x\n", i.DriverType)
+	default:
+	}
 	log.Printf("  Full struct:\n%#v\n", i)
 }
 
@@ -61,8 +107,12 @@ func mainImpl() error {
 		plural = "s"
 	}
 	fmt.Printf("Found %d device%s\n", len(all), plural)
-	for _, d := range all {
+	for i, d := range all {
+		fmt.Printf("- Device #%d\n", i)
 		process(d)
+		if i != len(all)-1 {
+			fmt.Printf("\n")
+		}
 	}
 	return nil
 }
