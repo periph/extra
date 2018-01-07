@@ -40,53 +40,43 @@ func (d *driver) NumDevices() (int, error) {
 	return num, nil
 }
 
-/*
-// ListDevices implements ftdi.Driver.
-func ListDevices() ([]DevInfo, error) {
-	num, e := createDeviceInfoList()
-	if e != 0 {
-		return nil, toErr("ListDevice initialization failed", e)
-	}
-	// Returns barely anything unless the device was opened.
-	dev, e := getDeviceInfoList(num)
-	if e != 0 {
-		return nil, toErr("ListDevice failed", e)
-	}
-	return dev, nil
-}
-*/
-
 //
 
-// handle implements ftdi.handle.
-type handle uintptr
+// device implements ftdi.handle.
+type device struct {
+	h handle
+	t devType
+}
 
 // Close implements ftdi.handle.
-func (h handle) Close() error {
-	return toErr("Close", closeHandle(h))
+func (d *device) Close() error {
+	return toErr("Close", d.closeHandle())
 }
 
 // GetInfo implements ftdi.handle.
 //
 // Under the hood, it calls both FT_GetDeviceInfo and FT_EEPROM_READ.
-func (h handle) GetInfo(i *ftdi.Info) error {
-	if e := getInfo(h, i); e != 0 {
-		return toErr("GetInfo", e)
-	}
-	return nil
+func (d *device) GetInfo(i *ftdi.Info) error {
+	return toErr("GetInfo", d.getInfo(i))
 }
 
-/* TODO(maruel): Soon!!
-func (h handle) SetBitMode(i int) error {
-	// FT_BITMODE_ASYNC_BITBANG
-	// FT_BITMODE_RESET
-	// FT_SetBitMode(ftHandle, Mask, Mode);
-	// FT_SetBaudRate(ftHandle, baudRate);
-	// FT_Write(ftHandle, &outputData, 1, &bytesWritten)
-	// FT_GetBitMode(ftHandle, &pinStatus)
-	return nil
+func (d *device) flushPending() error {
+	p, e := d.getReadPending()
+	if p == 0 || e != 0 {
+		return toErr("FlushPending", e)
+	}
+	_, e = d.doRead(make([]byte, p))
+	return toErr("FlushPending", e)
 }
-*/
+
+func (d *device) read(b []byte) (int, error) {
+	p, e := d.getReadPending()
+	if p == 0 || e != 0 {
+		return p, toErr("Read", e)
+	}
+	n, e := d.doRead(b[:p])
+	return n, toErr("Read", e)
+}
 
 //
 
@@ -268,3 +258,5 @@ func toErr(s string, e int) error {
 		return fmt.Errorf("ftd2xx: %s: unknown status %d", s, e)
 	}
 }
+
+var _ ftdi.Handle = &device{}

@@ -44,63 +44,33 @@ func createDeviceInfoList() (int, int) {
 	return int(num), int(e)
 }
 
-/*
-func getDeviceInfoList(num int) ([]ftdi.Info, int) {
-	l := make([]C.FT_DEVICE_LIST_INFO_NODE, num)
-	n := C.DWORD(num)
-	e := C.FT_GetDeviceInfoList(&l[0], &n)
-	var out []DevInfo
-	if e == 0 {
-		out = make([]ftdi.Info, 0, num)
-		for _, v := range l {
-			d := DevInfo{
-				Type:   devType(v.Type).String(),
-				VenID:   uint16(v.ID >> 16),
-				ProductID: uint16(v.ID),
-				LocID:  uint32(v.LocId),
-				Serial: C.GoString(&v.SerialNumber[0]),
-				Desc:   C.GoString(&v.Description[0]),
-				h:      handle(v.ftHandle),
-			}
-			if v.Flags&C.FT_FLAGS_OPENED != 0 {
-				d.Opened = true
-			}
-			if v.Flags&C.FT_FLAGS_HISPEED != 0 {
-				d.HiSpeed = true
-			}
-			out = append(out, d)
-		}
-	}
-	return out, int(e)
-}
-*/
-
 // Device functions.
 
-func open(i int) (handle, int) {
+func open(i int) (*device, int) {
 	var h C.FT_HANDLE
 	e := C.FT_Open(C.int(i), &h)
 	if uintptr(h) == 0 && e == 0 {
 		panic("unexpected")
 	}
-	return handle(h), int(e)
+	return &device{h: handle(h)}, int(e)
 }
 
-func closeHandle(h handle) int {
-	e := C.FT_Close(C.FT_HANDLE(h))
+func (d *device) closeHandle() int {
+	e := C.FT_Close(d.toH())
 	return int(e)
 }
 
-func getInfo(h handle, i *ftdi.Info) int {
+func (d *device) getInfo(i *ftdi.Info) int {
 	var dev C.FT_DEVICE
 	var id C.DWORD
 	// TODO(maruel): When specifying serial or desc, the function fails. It's not
 	// really important because we read the EEPROM instead.
-	if e := C.FT_GetDeviceInfo(C.FT_HANDLE(h), &dev, &id, nil, nil, nil); e != 0 {
+	if e := C.FT_GetDeviceInfo(d.toH(), &dev, &id, nil, nil, nil); e != 0 {
 		return int(e)
 	}
 	i.Opened = true
-	i.Type = devType(dev).String()
+	d.t = devType(dev)
+	i.Type = d.t.String()
 	i.VenID = uint16(id >> 16)
 	i.ProductID = uint16(id)
 
@@ -118,11 +88,11 @@ func getInfo(h handle, i *ftdi.Info) int {
 	// ft232r, it MUST be set. Since we can't know in advance what we must use,
 	// just try both. ¯\_(ツ)_/¯
 	hdr.deviceType = dev
-	if e := C.FT_EEPROM_Read(C.FT_HANDLE(h), eepromVoid, C.DWORD(len(eeprom)), &manufacturer[0], &manufacturerID[0], &desc[0], &serial[0]); e != 0 {
+	if e := C.FT_EEPROM_Read(d.toH(), eepromVoid, C.DWORD(len(eeprom)), &manufacturer[0], &manufacturerID[0], &desc[0], &serial[0]); e != 0 {
 		// FT_INVALID_PARAMETER
 		if e == 6 {
 			hdr.deviceType = 0
-			e = C.FT_EEPROM_Read(C.FT_HANDLE(h), eepromVoid, C.DWORD(len(eeprom)), &manufacturer[0], &manufacturerID[0], &desc[0], &serial[0])
+			e = C.FT_EEPROM_Read(d.toH(), eepromVoid, C.DWORD(len(eeprom)), &manufacturer[0], &manufacturerID[0], &desc[0], &serial[0])
 		}
 		if e != 0 {
 			return int(e)
@@ -133,7 +103,7 @@ func getInfo(h handle, i *ftdi.Info) int {
 	i.RemoteWakeup = hdr.RemoteWakeup != 0
 	i.PullDownEnable = hdr.PullDownEnable != 0
 
-	switch devType(dev) {
+	switch d.t {
 	case ft232H:
 		// TODO(maruel): Everything is empty, even when using
 		// examples/EEPROM/read/eeprom-read.c.
@@ -192,3 +162,28 @@ func getInfo(h handle, i *ftdi.Info) int {
 	i.Serial = C.GoString(&serial[0])
 	return 0
 }
+
+func (d *device) getReadPending() (int, int) {
+	// C.FT_GetQueueStatus(d.toH(), &pendingBytes);
+	return 0, missing
+}
+
+func (d *device) doRead(b []byte) (int, int) {
+	// FT_Read(d.toH(), &b[0], len(b), &bytesRead);
+	return 0, missing
+}
+
+func (d *device) getBits() (byte, int) {
+	var s C.UCHAR
+	e := C.FT_GetBitMode(d.toH(), &s)
+	return uint8(s), int(e)
+}
+
+func (d *device) toH() C.FT_HANDLE {
+	return C.FT_HANDLE(d.h)
+}
+
+// handle is a d2xx handle.
+//
+// TODO(maruel): Convert to type alias once go 1.9+ is required.
+type handle C.FT_HANDLE

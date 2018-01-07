@@ -31,70 +31,37 @@ func createDeviceInfoList() (int, int) {
 	return int(num), int(r1)
 }
 
-/*
-func getDeviceInfoList(num int) ([]ftdi.Info, int) {
-	if pGetDeviceInfoList == nil {
-		return nil, missing
-	}
-	b := make([]byte, deviceListInfoNodeSize*num)
-	var actual uint32
-	r1, _, _ := pGetDeviceInfoList.Call(uintptr(unsafe.Pointer(&b[0])), uintptr(unsafe.Pointer(&actual)))
-	var out []ftdi.Info
-	if r1 == 0 {
-		l := ((*[256]deviceListInfoNode)(unsafe.Pointer(&b[0])))[:num]
-		out = make([]ftdi.Info, 0, num)
-		for _, v := range l {
-			d := DevInfo{
-				Type:   devType(v.Type).String(),
-				ID:     uint32(v.ID),
-				LocID:  uint32(v.LocId),
-				Serial: toStr(v.SerialNumber[:]),
-				Desc:   toStr(v.Description[:]),
-				h:      handle(v.ftHandle),
-			}
-			if v.Flags&ftFlagsOpened != 0 {
-				d.Opened = true
-			}
-			if v.Flags&ftFlagsHispeed != 0 {
-				d.HiSpeed = true
-			}
-			out = append(out, d)
-		}
-	}
-	return out, int(r1)
-}
-*/
-
 // Device functions.
 
-func open(i int) (handle, int) {
+func open(i int) (*device, int) {
 	var h handle
 	if pOpen == nil {
-		return h, missing
+		return nil, missing
 	}
 	r1, _, _ := pOpen.Call(uintptr(i), uintptr(unsafe.Pointer(&h)))
-	return h, int(r1)
+	return &device{h: h}, int(r1)
 }
 
-func closeHandle(h handle) int {
+func (d *device) closeHandle() int {
 	if pClose == nil {
 		return missing
 	}
-	r1, _, _ := pClose.Call(uintptr(h))
+	r1, _, _ := pClose.Call(d.toH())
 	return int(r1)
 }
 
-func getInfo(h handle, i *ftdi.Info) int {
+func (d *device) getInfo(i *ftdi.Info) int {
 	if pGetDeviceInfo == nil || pEEPROMRead == nil {
 		return missing
 	}
 	var dev uint32
 	var id uint32
-	if r1, _, _ := pGetDeviceInfo.Call(uintptr(h), uintptr(unsafe.Pointer(&dev)), uintptr(unsafe.Pointer(&id)), 0, 0, 0); r1 != 0 {
+	if r1, _, _ := pGetDeviceInfo.Call(d.toH(), uintptr(unsafe.Pointer(&dev)), uintptr(unsafe.Pointer(&id)), 0, 0, 0); r1 != 0 {
 		return int(r1)
 	}
 	i.Opened = true
-	i.Type = devType(dev).String()
+	d.t = devType(dev)
+	i.Type = d.t.String()
 	i.VenID = uint16(id >> 16)
 	i.ProductID = uint16(id)
 
@@ -105,14 +72,14 @@ func getInfo(h handle, i *ftdi.Info) int {
 	// Shortcuts.
 	m := uintptr(unsafe.Pointer(&manufacturer[0]))
 	mi := uintptr(unsafe.Pointer(&manufacturerID[0]))
-	d := uintptr(unsafe.Pointer(&desc[0]))
+	de := uintptr(unsafe.Pointer(&desc[0]))
 	s := uintptr(unsafe.Pointer(&serial[0]))
 
 	// This data was determined by tracing with a debugger.
 	//
 	// It must not be any other value, like 56 used on posix. ¯\_(ツ)_/¯
 	l := 0
-	switch devType(dev) {
+	switch d.t {
 	case ft232H:
 		l = 44
 	case ft232R:
@@ -126,7 +93,7 @@ func getInfo(h handle, i *ftdi.Info) int {
 	hdr := (*eeprom_header)(eepromVoid)
 	// It MUST be set here. This is not always the case on posix.
 	hdr.deviceType = dev
-	if r1, _, _ := pEEPROMRead.Call(uintptr(h), uintptr(eepromVoid), uintptr(l), m, mi, d, s); r1 != 0 {
+	if r1, _, _ := pEEPROMRead.Call(d.toH(), uintptr(eepromVoid), uintptr(l), m, mi, de, s); r1 != 0 {
 		return int(r1)
 	}
 
@@ -136,7 +103,7 @@ func getInfo(h handle, i *ftdi.Info) int {
 	i.RemoteWakeup = hdr.RemoteWakeup != 0
 	i.PullDownEnable = hdr.PullDownEnable != 0
 
-	switch devType(dev) {
+	switch d.t {
 	case ft232H:
 		h := (*eeprom_ft232h)(eepromVoid)
 		i.CSlowSlew = h.ACSlowSlew != 0
@@ -195,6 +162,38 @@ func getInfo(h handle, i *ftdi.Info) int {
 	return 0
 }
 
+func (d *device) getReadPending() (int, int) {
+	if pGetQueueStatus == nil {
+		return 0, missing
+	}
+	return 0, missing
+}
+
+func (d *device) doRead(b []byte) (int, int) {
+	if pRead == nil {
+		return 0, missing
+	}
+	return 0, missing
+}
+
+func (d *device) getBits() (byte, int) {
+	if pGetBitMode == nil {
+		return 0, missing
+	}
+	var s uint8
+	r1, _, _ := pGetBitMode.Call(d.toH(), uintptr(unsafe.Pointer(&s)))
+	return s, int(r1)
+}
+
+func (d *device) toH() uintptr {
+	return uintptr(d.h)
+}
+
+// handle is a d2xx handle.
+//
+// TODO(maruel): Convert to type alias once go 1.9+ is required.
+type handle uintptr
+
 //
 
 var (
@@ -204,10 +203,14 @@ var (
 	//pGetDeviceInfoList    *syscall.Proc
 
 	// Device functions.
-	pOpen          *syscall.Proc
-	pClose         *syscall.Proc
-	pGetDeviceInfo *syscall.Proc
-	pEEPROMRead    *syscall.Proc
+	pOpen           *syscall.Proc
+	pClose          *syscall.Proc
+	pGetDeviceInfo  *syscall.Proc
+	pEEPROMRead     *syscall.Proc
+	pGetBitMode     *syscall.Proc
+	pSetBitMode     *syscall.Proc
+	pGetQueueStatus *syscall.Proc
+	pRead           *syscall.Proc
 )
 
 // eeprom_header
@@ -303,6 +306,10 @@ func init() {
 		pClose, _ = dll.FindProc("FT_Close")
 		pGetDeviceInfo, _ = dll.FindProc("FT_GetDeviceInfo")
 		pEEPROMRead, _ = dll.FindProc("FT_EEPROM_Read")
+		pGetBitMode, _ = dll.FindProc("FT_GetBitMode")
+		pSetBitMode, _ = dll.FindProc("FT_SetBitMode")
+		pGetQueueStatus, _ = dll.FindProc("FT_GetQueueStatus")
+		pRead, _ = dll.FindProc("FT_Read")
 	}
 }
 
@@ -313,20 +320,3 @@ func toStr(c []byte) string {
 	}
 	return string(c)
 }
-
-/*
-const ftFlagsOpened = 1
-const ftFlagsHispeed = 2
-
-type deviceListInfoNode struct {
-	Flags        uint32
-	Type         uint32
-	ID           uint32
-	LocId        uint32
-	SerialNumber [16]byte
-	Description  [64]byte
-	ftHandle     uintptr
-}
-
-var deviceListInfoNodeSize = int(reflect.TypeOf((*deviceListInfoNode)(nil)).Elem().Size())
-*/

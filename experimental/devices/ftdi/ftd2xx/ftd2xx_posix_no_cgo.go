@@ -19,22 +19,30 @@ func createDeviceInfoList() (int, int) {
 	return 0, noCGO
 }
 
-/*
-func getDeviceInfoList(num int) ([]ftdi.Info, int) {
-	return nil, noCGO
-}
-*/
-
 // Device functions.
 
-func open(i int) (handle, int) {
+func open(i int) (*device, int) {
+	return nil, noCGO
+}
+
+func (d *device) closeHandle() int {
+	return noCGO
+}
+
+func (d *device) getInfo(i *ftdi.Info) int {
+	return noCGO
+}
+
+func (d *device) getReadPending() (int, int) {
 	return 0, noCGO
 }
 
-func closeHandle(h handle) int {
-	return noCGO
+func (d *device) doRead(b []byte) (int, int) {
+	return 0, noCGO
 }
 
-func getInfo(h handle, i *ftdi.Info) int {
-	return noCGO
+func (d *device) getBits() (byte, int) {
+	return 0, noCGO
 }
+
+type handle uintptr
