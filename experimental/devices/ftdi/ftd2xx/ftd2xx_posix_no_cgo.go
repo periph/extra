@@ -7,8 +7,6 @@
 
 package ftd2xx
 
-import "periph.io/x/extra/experimental/devices/ftdi"
-
 // Library functions.
 
 func getLibraryVersion() (uint8, uint8, uint8) {
@@ -29,7 +27,7 @@ func (d *device) closeHandle() int {
 	return noCGO
 }
 
-func (d *device) getInfo(i *ftdi.Info) int {
+func (d *device) getInfo() int {
 	return noCGO
 }
 

@@ -201,7 +201,7 @@ type Handle interface {
 	// Nobody should normally close the handle.
 	io.Closer
 	// GetInfo returns information about the device.
-	GetInfo(i *Info) error
+	GetInfo(i *Info)
 	// TODO(maruel): Add operations.
 }
 
@@ -253,9 +253,7 @@ func open(i int) (Dev, error) {
 		return nil, err
 	}
 	var info Info
-	if err := h.GetInfo(&info); err != nil {
-		return nil, err
-	}
+	h.GetInfo(&info)
 	g := Generic{index: i, h: h, info: info}
 	switch info.Type {
 	case "ft232h":

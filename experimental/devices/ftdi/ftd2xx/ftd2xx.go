@@ -7,6 +7,7 @@ package ftd2xx
 import (
 	"errors"
 	"fmt"
+	"unsafe"
 
 	"periph.io/x/extra/experimental/devices/ftdi"
 )
@@ -28,6 +29,10 @@ func (d *driver) Open(i int) (ftdi.Handle, error) {
 	if e != 0 {
 		return h, toErr("Open failed", e)
 	}
+	// Under the hood, it calls both FT_GetDeviceInfo and FT_EEPROM_READ.
+	// Ignore the error code, when it fails, the device will be marked as "not
+	// opened".
+	_ = h.getInfo()
 	return h, nil
 }
 
@@ -44,8 +49,15 @@ func (d *driver) NumDevices() (int, error) {
 
 // device implements ftdi.handle.
 type device struct {
-	h handle
-	t devType
+	h              handle
+	t              devType
+	venID          uint16
+	productID      uint16
+	manufacturer   string
+	manufacturerID string
+	desc           string
+	serial         string
+	eeprom         []byte
 }
 
 // Close implements ftdi.handle.
@@ -54,10 +66,78 @@ func (d *device) Close() error {
 }
 
 // GetInfo implements ftdi.handle.
-//
-// Under the hood, it calls both FT_GetDeviceInfo and FT_EEPROM_READ.
-func (d *device) GetInfo(i *ftdi.Info) error {
-	return toErr("GetInfo", d.getInfo(i))
+func (d *device) GetInfo(i *ftdi.Info) {
+	i.Type = d.t.String()
+	i.VenID = d.venID
+	i.ProductID = d.productID
+	i.Manufacturer = d.manufacturer
+	i.ManufacturerID = d.manufacturerID
+	i.Desc = d.desc
+	i.Serial = d.serial
+	if len(d.eeprom) > 0 {
+		// Only consider the device "good" if we could read the EEPROM.
+		i.Opened = true
+		i.EEPROM = make([]byte, len(d.eeprom))
+		copy(i.EEPROM, d.eeprom)
+
+		// Use the custom structs instead of the ones provided by the library. The
+		// reason is that it had to be written for Windows anyway, and this enables
+		// using a single code path everywhere.
+		hdr := (*eeprom_header)(unsafe.Pointer(&d.eeprom[0]))
+		i.MaxPower = uint16(hdr.MaxPower)
+		i.SelfPowered = hdr.SelfPowered != 0
+		i.RemoteWakeup = hdr.RemoteWakeup != 0
+		i.PullDownEnable = hdr.PullDownEnable != 0
+		switch d.t {
+		case ft232H:
+			h := (*eeprom_ft232h)(unsafe.Pointer(&d.eeprom[0]))
+			i.CSlowSlew = h.ACSlowSlew != 0
+			i.CSchmittInput = h.ACSchmittInput != 0
+			i.CDriveCurrent = uint8(h.ACDriveCurrent)
+			i.DSlowSlew = h.ADSlowSlew != 0
+			i.DSchmittInput = h.ADSchmittInput != 0
+			i.DDriveCurrent = uint8(h.ADDriveCurrent)
+			i.Cbus0 = uint8(h.Cbus0)
+			i.Cbus1 = uint8(h.Cbus1)
+			i.Cbus2 = uint8(h.Cbus2)
+			i.Cbus3 = uint8(h.Cbus3)
+			i.Cbus4 = uint8(h.Cbus4)
+			i.Cbus5 = uint8(h.Cbus5)
+			i.Cbus6 = uint8(h.Cbus6)
+			i.Cbus7 = uint8(h.Cbus7)
+			i.Cbus8 = uint8(h.Cbus8)
+			i.Cbus9 = uint8(h.Cbus9)
+			i.FT1248Cpol = h.FT1248Cpol != 0
+			i.FT1248Lsb = h.FT1248Lsb != 0
+			i.FT1248FlowControl = h.FT1248FlowControl != 0
+			i.IsFifo = h.IsFifo != 0
+			i.IsFifoTar = h.IsFifoTar != 0
+			i.IsFastSer = h.IsFastSer != 0
+			i.IsFT1248 = h.IsFT1248 != 0
+			i.PowerSaveEnable = h.PowerSaveEnable != 0
+			i.DriverType = uint8(h.DriverType)
+		case ft232R:
+			h := (*eeprom_ft232r)(unsafe.Pointer(&d.eeprom[0]))
+			i.IsHighCurrent = h.IsHighCurrent != 0
+			i.UseExtOsc = h.UseExtOsc != 0
+			i.InvertTXD = h.InvertTXD != 0
+			i.InvertRXD = h.InvertRXD != 0
+			i.InvertRTS = h.InvertRTS != 0
+			i.InvertCTS = h.InvertCTS != 0
+			i.InvertDTR = h.InvertDTR != 0
+			i.InvertDSR = h.InvertDSR != 0
+			i.InvertDCD = h.InvertDCD != 0
+			i.InvertRI = h.InvertRI != 0
+			i.Cbus0 = uint8(h.Cbus0)
+			i.Cbus1 = uint8(h.Cbus1)
+			i.Cbus2 = uint8(h.Cbus2)
+			i.Cbus3 = uint8(h.Cbus3)
+			i.Cbus4 = uint8(h.Cbus4)
+			i.DriverType = uint8(h.DriverType)
+		default:
+			// TODO(maruel): Implement me!
+		}
+	}
 }
 
 func (d *device) flushPending() error {
@@ -81,7 +161,7 @@ func (d *device) read(b []byte) (int, error) {
 //
 
 // devType is the FTDI device type.
-type devType int
+type devType uint32
 
 const (
 	ftBM devType = iota
@@ -133,6 +213,21 @@ func (d devType) String() string {
 		return "ft4222 prog"
 	default:
 		return "unknown"
+	}
+}
+
+func (d devType) eepromSize() int {
+	// This data was determined by tracing with a debugger.
+	//
+	// It must not be any other value, like 56 used on posix. ¯\_(ツ)_/¯
+	switch d {
+	case ft232H:
+		return 44
+	case ft232R:
+		return 32
+	default:
+		// TODO(maruel): Figure out.
+		return 56
 	}
 }
 
@@ -204,8 +299,90 @@ const (
 	ft232H_CBusClk30    = 0x0A // 30MHz clock
 	ft232H_CBusClk15    = 0x0B // 15MHz clock
 	ft232H_CBusClk7_5   = 0x0C // 7.5MHz clock
-
 )
+
+// eeprom_header is FT_EEPROM_HEADER.
+type eeprom_header struct {
+	deviceType     devType // FTxxxx device type to be programmed
+	VendorID       uint16  // Defaults to 0x0403; can be changed.
+	ProductID      uint16  // Defaults to 0x6001 for ft232h, relevant value.
+	SerNumEnable   uint8   // Non-zero if serial number to be used.
+	MaxPower       uint16  // 0 < MaxPower <= 500
+	SelfPowered    uint8   // 0 = bus powered, 1 = self powered
+	RemoteWakeup   uint8   // 0 = not capable, 1 = capable
+	PullDownEnable uint8   //
+}
+
+// eeprom_ft232h is FT_EEPROM_232H
+type eeprom_ft232h struct {
+	// eeprom_header
+	deviceType     devType // FTxxxx device type to be programmed
+	VendorID       uint16  // 0x0403
+	ProductID      uint16  // 0x6001
+	SerNumEnable   uint8   // non-zero if serial number to be used
+	MaxPower       uint16  // 0 < MaxPower <= 500
+	SelfPowered    uint8   // 0 = bus powered, 1 = self powered
+	RemoteWakeup   uint8   // 0 = not capable, 1 = capable
+	PullDownEnable uint8   //
+
+	// ft232h specific.
+	ACSlowSlew        uint8 // AC bus pins have slow slew
+	ACSchmittInput    uint8 // AC bus pins are Schmitt input
+	ACDriveCurrent    uint8 // valid values are 4mA, 8mA, 12mA, 16mA
+	ADSlowSlew        uint8 // non-zero if AD bus pins have slow slew
+	ADSchmittInput    uint8 // non-zero if AD bus pins are Schmitt input
+	ADDriveCurrent    uint8 // valid values are 4mA, 8mA, 12mA, 16mA
+	Cbus0             uint8 // Cbus Mux control
+	Cbus1             uint8 // Cbus Mux control
+	Cbus2             uint8 // Cbus Mux control
+	Cbus3             uint8 // Cbus Mux control
+	Cbus4             uint8 // Cbus Mux control
+	Cbus5             uint8 // Cbus Mux control
+	Cbus6             uint8 // Cbus Mux control
+	Cbus7             uint8 // Cbus Mux control
+	Cbus8             uint8 // Cbus Mux control
+	Cbus9             uint8 // Cbus Mux control
+	FT1248Cpol        uint8 // FT1248 clock polarity - clock idle high (true) or clock idle low (false)
+	FT1248Lsb         uint8 // FT1248 data is LSB (true), or MSB (false)
+	FT1248FlowControl uint8 // FT1248 flow control enable
+	IsFifo            uint8 // Interface is 245 FIFO
+	IsFifoTar         uint8 // Interface is 245 FIFO CPU target
+	IsFastSer         uint8 // Interface is Fast serial
+	IsFT1248          uint8 // Interface is FT1248
+	PowerSaveEnable   uint8 //
+	DriverType        uint8 //
+}
+
+// eeprom_ft232r is FT_EEPROM_232R
+type eeprom_ft232r struct {
+	// eeprom_header
+	deviceType     devType // FTxxxx device type to be programmed
+	VendorID       uint16  // 0x0403
+	ProductID      uint16  // 0x6001
+	SerNumEnable   uint8   // non-zero if serial number to be used
+	MaxPower       uint16  // 0 < MaxPower <= 500
+	SelfPowered    uint8   // 0 = bus powered, 1 = self powered
+	RemoteWakeup   uint8   // 0 = not capable, 1 = capable
+	PullDownEnable uint8   //
+
+	// ft232r specific.
+	IsHighCurrent uint8
+	UseExtOsc     uint8
+	InvertTXD     uint8
+	InvertRXD     uint8
+	InvertRTS     uint8
+	InvertCTS     uint8
+	InvertDTR     uint8
+	InvertDSR     uint8
+	InvertDCD     uint8
+	InvertRI      uint8
+	Cbus0         uint8 // Cbus Mux control
+	Cbus1         uint8 // Cbus Mux control
+	Cbus2         uint8 // Cbus Mux control
+	Cbus3         uint8 // Cbus Mux control
+	Cbus4         uint8 // Cbus Mux control
+	DriverType    uint8 //
+}
 
 func toErr(s string, e int) error {
 	switch e {
