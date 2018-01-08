@@ -115,7 +115,7 @@ func (d *device) d2xxGetQueueStatus() (uint32, int) {
 		return 0, missing
 	}
 	var v uint32
-	r1, _, _ := pGetBitMode.Call(d.toH(), uintptr(unsafe.Pointer(&v)))
+	r1, _, _ := pGetQueueStatus.Call(d.toH(), uintptr(unsafe.Pointer(&v)))
 	return v, int(r1)
 }
 
