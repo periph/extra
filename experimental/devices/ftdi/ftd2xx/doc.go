@@ -6,7 +6,9 @@
 //
 // Troubleshooting
 //
-// See https://github.com/periph/extra/tree/master/experimental/devices/ftdi/ftd2xx
+// See doc.go in
+// https://github.com/periph/extra/tree/master/experimental/devices/ftdi/ftd2xx
+// for more developer links.
 package ftd2xx
 
 // D2XX programmer's guide; Explains how to use the DLL provided by ftdi.

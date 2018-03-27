@@ -18,7 +18,7 @@ const VenID uint16 = 0x0403
 
 // Info is the information gathered about the connected FTDI device.
 //
-// Some is gather from USB descriptor, some from the EEPROM if possible.
+// Some is gathered from the USB descriptor, some from the EEPROM if possible.
 type Info struct {
 	// Opened is true if the device was successfully opened.
 	Opened bool
@@ -294,3 +294,5 @@ func open(i int) (Dev, error) {
 		return &g, nil
 	}
 }
+
+var _ conn.Resource = Dev(nil)

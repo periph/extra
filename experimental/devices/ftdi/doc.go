@@ -22,7 +22,9 @@
 //
 // Troubleshooting
 //
-// See https://github.com/periph/extra/tree/master/experimental/devices/ftdi/ftd2xx
+// See doc.go in
+// https://github.com/periph/extra/tree/master/experimental/devices/ftdi/ftd2xx
+// for more developer links.
 package ftdi
 
 // There is multiple ways to access a FT232H:

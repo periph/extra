@@ -12,7 +12,7 @@ import (
 	"periph.io/x/periph/host"
 )
 
-func Example_All() {
+func ExampleAll() {
 	if _, err := host.Init(); err != nil {
 		log.Fatal(err)
 	}

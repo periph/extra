@@ -6,6 +6,7 @@ package ftdi
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"periph.io/x/periph/conn/gpio"
@@ -65,4 +66,5 @@ func (p *Pin) Out(l gpio.Level) error {
 	return errors.New("ft232h: to be implemented")
 }
 
+var _ fmt.Stringer = &Pin{}
 var _ gpio.PinIO = &Pin{}
