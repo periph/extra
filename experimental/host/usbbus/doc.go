@@ -12,7 +12,23 @@
 // depends on libusb being installed. This is generally not the case by
 // default, so it causes a go get failure which is really obnoxious to users.
 //
-// Ubuntu
+// Debian
 //
-//     sudo apt install libusb-1.0-0-dev
+// This includes Raspbian and Ubuntu.
+//
+// First configure cgo as explained at https://periph.io/x/extra#hdr-Debian.
+//
+// You need to install libusb-1.0:
+//
+//  sudo apt install libusb-1.0-0-dev
+//
+// MacOS
+//
+// First configure cgo as explained at https://periph.io/x/extra#hdr-MacOS.
+//
+//  brew install libusb
+//
+// Windows
+//
+// The package is currently disabled on Windows.
 package usbbus

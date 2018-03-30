@@ -27,6 +27,10 @@ func (d *device) closeHandle() int {
 	return noCGO
 }
 
+func (d *device) resetDevice() int {
+	return noCGO
+}
+
 func (d *device) getInfo() int {
 	return noCGO
 }

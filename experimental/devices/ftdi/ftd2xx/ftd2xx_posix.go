@@ -44,6 +44,11 @@ func (d *device) closeHandle() int {
 	return int(e)
 }
 
+func (d *device) resetDevice() int {
+	e := C.FT_ResetDevice(d.toH())
+	return int(e)
+}
+
 func (d *device) getInfo() int {
 	var dev C.FT_DEVICE
 	var id C.DWORD

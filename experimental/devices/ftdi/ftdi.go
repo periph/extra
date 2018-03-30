@@ -114,9 +114,10 @@ func (g *Generic) String() string {
 }
 
 // Halt implements conn.Resource.
+//
+// This halts all operations going through this device.
 func (g *Generic) Halt() error {
-	// TODO(maruel): Halt all operations going through this device.
-	return nil
+	return g.h.Reset()
 }
 
 // GetDevInfo returns information about an opened device.
@@ -202,6 +203,8 @@ type Handle interface {
 	io.Closer
 	// GetInfo returns information about the device.
 	GetInfo(i *Info)
+	// Reset resets the device, stopping all operations.
+	Reset() error
 	// TODO(maruel): Add operations.
 }
 

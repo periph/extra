@@ -47,7 +47,7 @@ func (d *driver) NumDevices() (int, error) {
 
 //
 
-// device implements ftdi.handle.
+// device implements ftdi.Handle.
 type device struct {
 	h              handle
 	t              devType
@@ -60,12 +60,12 @@ type device struct {
 	eeprom         []byte
 }
 
-// Close implements ftdi.handle.
+// Close implements ftdi.Handle.
 func (d *device) Close() error {
 	return toErr("Close", d.closeHandle())
 }
 
-// GetInfo implements ftdi.handle.
+// GetInfo implements ftdi.Handle.
 func (d *device) GetInfo(i *ftdi.Info) {
 	i.Type = d.t.String()
 	i.VenID = d.venID
@@ -138,6 +138,11 @@ func (d *device) GetInfo(i *ftdi.Info) {
 			// TODO(maruel): Implement me!
 		}
 	}
+}
+
+// Reset implements ftdi.Handle.
+func (d *device) Reset() error {
+	return toErr("Reset", d.resetDevice())
 }
 
 func (d *device) flushPending() error {
@@ -235,7 +240,6 @@ func (d devType) eepromSize() int {
 // - FT_Read
 // - FT_Write
 // - FT_IoCtl
-// - FT_ResetDevice
 // UART:
 // - FT_SetBaudRate
 // - FT_SetDivisor

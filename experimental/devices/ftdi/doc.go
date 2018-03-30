@@ -8,6 +8,26 @@
 // It currently leverages subpackage ftd2xx but it is designed to be ported to
 // the open source library libftdi.
 //
+// Debian
+//
+// This includes Raspbian and Ubuntu.
+//
+// First configure cgo as explained at https://periph.io/x/extra#hdr-Debian.
+//
+// You need to install libusb-1.0, run:
+//
+//  sudo apt install libusb-1.0-0-dev
+//
+// MacOS
+//
+// First configure cgo as explained at https://periph.io/x/extra#hdr-MacOS.
+//
+// That's it!
+//
+// Windows
+//
+// Good news, no configuration is needed, it'll work as-is.
+//
 // Supported products
 //
 // http://www.ftdichip.com/Products/ICs/FT232R.htm

@@ -48,6 +48,14 @@ func (d *device) closeHandle() int {
 	return int(r1)
 }
 
+func (d *device) resetDevice() int {
+	if pResetDevice == nil {
+		return missing
+	}
+	r1, _, _ := pResetDevice.Call(d.toH())
+	return int(r1)
+}
+
 func (d *device) getInfo() int {
 	if pGetDeviceInfo == nil || pEEPROMRead == nil {
 		return missing
@@ -128,6 +136,7 @@ var (
 	// Device functions.
 	pOpen           *syscall.Proc
 	pClose          *syscall.Proc
+	pResetDevice    *syscall.Proc
 	pGetDeviceInfo  *syscall.Proc
 	pEEPROMRead     *syscall.Proc
 	pGetBitMode     *syscall.Proc
@@ -146,6 +155,7 @@ func init() {
 		// Device functions.
 		pOpen, _ = dll.FindProc("FT_Open")
 		pClose, _ = dll.FindProc("FT_Close")
+		pResetDevice, _ = dll.FindProc("FT_ResetDevice")
 		pGetDeviceInfo, _ = dll.FindProc("FT_GetDeviceInfo")
 		pEEPROMRead, _ = dll.FindProc("FT_EEPROM_Read")
 		pGetBitMode, _ = dll.FindProc("FT_GetBitMode")
