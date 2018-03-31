@@ -2,13 +2,10 @@
 // Use of this source code is governed under the Apache License, Version 2.0
 // that can be found in the LICENSE file.
 
-package ftdi
+package ftd2xx
 
 import (
-	"errors"
 	"fmt"
-	"io"
-	"sync"
 
 	"periph.io/x/periph/conn"
 )
@@ -100,34 +97,36 @@ type Dev interface {
 	GetInfo(i *Info)
 }
 
-// Generic represents a generic FTDI device.
+// generic represents a generic FTDI device.
 //
 // It is used for the models that this package doesn't fully support yet.
-type Generic struct {
+type generic struct {
 	index int
-	h     Handle // it may be nil if the device couldn't be opened.
+	h     *device // it may be nil if the device couldn't be opened.
 	info  Info
 }
 
-func (g *Generic) String() string {
+func (g *generic) String() string {
 	return fmt.Sprintf("ftdi(%d)", g.index)
 }
 
 // Halt implements conn.Resource.
 //
 // This halts all operations going through this device.
-func (g *Generic) Halt() error {
-	return g.h.Reset()
+func (g *generic) Halt() error {
+	return g.h.reset()
 }
 
 // GetDevInfo returns information about an opened device.
-func (g *Generic) GetInfo(i *Info) {
+func (g *generic) GetInfo(i *Info) {
 	*i = g.info
 }
 
 // FT232H represents a FT232H device.
+//
+// It implemented Dev.
 type FT232H struct {
-	Generic
+	generic
 
 	C0 Pin
 	C1 Pin
@@ -154,8 +153,10 @@ func (f *FT232H) String() string {
 }
 
 // FT232R represents a FT232R device.
+//
+// It implemented Dev.
 type FT232R struct {
-	Generic
+	generic
 
 	TX  Pin
 	RX  Pin
@@ -171,131 +172,6 @@ func (f *FT232R) String() string {
 	return fmt.Sprintf("ft232r(%d)", f.index)
 }
 
-// All enumerates all the connected FTDI devices.
 //
-// Some may not be opened; they may already be opened by another process or by
-// a driver included by the operating system.
-//
-// See
-// https://github.com/periph/extra/tree/master/experimental/devices/ftdi/ftd2xx
-func All() []Dev {
-	mu.Lock()
-	defer mu.Unlock()
-	out := make([]Dev, len(all))
-	copy(out, all)
-	return out
-}
-
-// Driver is implemented by ftd2xx and eventually by libftdi and ftd3xx.
-type Driver interface {
-	// Version returns the major, minor and build number version of the user mode
-	// library.
-	Version() (uint8, uint8, uint8)
-	// NumDevices returns the number of FTDI devices found on the USB buses.
-	NumDevices() (int, error)
-	// Open opens a device at index i.
-	Open(i int) (Handle, error)
-}
-
-// Handle is implemented by ftd2xx and eventually by libftdi and ftd3xx.
-type Handle interface {
-	// Nobody should normally close the handle.
-	io.Closer
-	// GetInfo returns information about the device.
-	GetInfo(i *Info)
-	// Reset resets the device, stopping all operations.
-	Reset() error
-	// TODO(maruel): Add operations.
-}
-
-// RegisterDriver registers a driver.
-//
-// Normally this should be &ftd2xx.Driver.
-//
-// Opens all devices found that are not already busy due to another OS provided
-// driver.
-func RegisterDriver(d Driver) error {
-	mu.Lock()
-	defer mu.Unlock()
-	if driver != nil {
-		// TODO(maruel): Unload the previous one?
-		return errors.New("ftdi: a driver is already registered")
-	}
-	driver = d
-	num, err := driver.NumDevices()
-	if err != nil {
-		return err
-	}
-	for i := 0; i < num; i++ {
-		if d, err1 := open(i); err1 == nil {
-			all = append(all, d)
-		} else {
-			// Create a shallow generic handle.
-			err = err1
-			all = append(all, &Generic{index: i})
-		}
-	}
-	return err
-}
-
-//
-
-var (
-	mu     sync.Mutex
-	driver Driver
-	all    []Dev
-	failed error
-)
-
-// open opens a FTDI device.
-//
-// Must be called with mu held.
-func open(i int) (Dev, error) {
-	h, err := driver.Open(i)
-	if err != nil {
-		return nil, err
-	}
-	var info Info
-	h.GetInfo(&info)
-	g := Generic{index: i, h: h, info: info}
-	switch info.Type {
-	case "ft232h":
-		return &FT232H{
-			Generic: g,
-			C0:      Pin{num: 0, n: "C0"},
-			C1:      Pin{num: 1, n: "C1"},
-			C2:      Pin{num: 2, n: "C2"},
-			C3:      Pin{num: 3, n: "C3"},
-			C4:      Pin{num: 4, n: "C4"},
-			C5:      Pin{num: 5, n: "C5"},
-			C6:      Pin{num: 6, n: "C6"},
-			C7:      Pin{num: 7, n: "C7"},
-			C8:      Pin{num: 8, n: "C8"},
-			C9:      Pin{num: 9, n: "C9"},
-			D0:      Pin{num: 10, n: "D0"},
-			D1:      Pin{num: 11, n: "D1"},
-			D2:      Pin{num: 12, n: "D2"},
-			D3:      Pin{num: 13, n: "D3"},
-			D4:      Pin{num: 14, n: "D4"},
-			D5:      Pin{num: 15, n: "D5"},
-			D6:      Pin{num: 16, n: "D6"},
-			D7:      Pin{num: 17, n: "D7"},
-		}, nil
-	case "ft232r":
-		return &FT232R{
-			Generic: g,
-			TX:      Pin{num: 0, n: "TX"},
-			RX:      Pin{num: 1, n: "RX"},
-			RTS:     Pin{num: 2, n: "RTS"},
-			CTS:     Pin{num: 3, n: "CTS"},
-			DTR:     Pin{num: 4, n: "DTR"},
-			DSR:     Pin{num: 5, n: "DSR"},
-			DCD:     Pin{num: 6, n: "DCD"},
-			RI:      Pin{num: 7, n: "R:"},
-		}, nil
-	default:
-		return &g, nil
-	}
-}
 
 var _ conn.Resource = Dev(nil)

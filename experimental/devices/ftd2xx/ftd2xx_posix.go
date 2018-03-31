@@ -30,7 +30,7 @@ func createDeviceInfoList() (int, int) {
 
 // Device functions.
 
-func open(i int) (*device, int) {
+func openHandle(i int) (*device, int) {
 	var h C.FT_HANDLE
 	e := C.FT_Open(C.int(i), &h)
 	if uintptr(h) == 0 && e == 0 {

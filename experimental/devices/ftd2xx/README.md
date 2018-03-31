@@ -35,10 +35,11 @@ sudo kextunload -b com.apple.driver.AppleUSBFTDI
 Figure out, likely run the command above upon all boot?
 
 
-## Linux
+## Debian
 
-On linux, there is no need to install anything as the following drivers are
-included but the OS provided driver gets in the way and must be disabled.
+On Debian based distros (Raspbian/Ubuntu), there is no need to install anything
+as the following drivers are included but the OS provided driver gets in the way
+and must be disabled.
 
 - linux_arm/libftd2xx.a v1.4.6 with ARMv6 hard float (RPi compatible)
 - linux_amd64/libftd2xx.a v1.4.6
@@ -61,7 +62,7 @@ sudo modprobe -r ftdi_so usbserial
 Reconnect your device after running the following command:
 
 ```
-cd $GOPATH/src/periph.io/x/extra/experimental/devices/ftdi/ftd2xx
+cd $GOPATH/src/periph.io/x/extra/experimental/devices/ftd2xx
 sudo cp debian/d98-ft232h.rules /etc/udev/rules.d/
 sudo udevadm control --reload-rules
 sudo udevadm trigger --verbose

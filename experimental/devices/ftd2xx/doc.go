@@ -2,8 +2,8 @@
 // Use of this source code is governed under the Apache License, Version 2.0
 // that can be found in the LICENSE file.
 
-// Package ftdi implements support for various Future Technology devices like
-// the FT232H USB GPIO, I²C, SPI, CAN, UART, JTAG bus.
+// Package ftd2xx implements support for various Future Technology devices like
+// the FT232H USB GPIO, I²C, SPI, CAN, UART, JTAG bus via its D2XX driver.
 //
 // It currently leverages subpackage ftd2xx but it is designed to be ported to
 // the open source library libftdi.
@@ -12,21 +12,35 @@
 //
 // This includes Raspbian and Ubuntu.
 //
-// First configure cgo as explained at https://periph.io/x/extra#hdr-Debian.
+// Configure cgo as explained at https://periph.io/x/extra#hdr-Debian.
 //
-// You need to install libusb-1.0, run:
+// Temporary: Run this command after connecting your FTDI device to temporarily
+// disable linux's native driver:
+//  sudo modprobe -r ftdi_so usbserial
 //
-//  sudo apt install libusb-1.0-0-dev
+// Permanent: Reconnect your device after running the following command:
+//
+//  cd $GOPATH/src/periph.io/x/extra/experimental/devices/ftd2xx
+//  sudo cp debian/d98-ft232h.rules /etc/udev/rules.d/
+//  sudo udevadm control --reload-rules
+//  sudo udevadm trigger --verbose
+//
+// That's it!
 //
 // MacOS
 //
-// First configure cgo as explained at https://periph.io/x/extra#hdr-MacOS.
+// Configure cgo as explained at https://periph.io/x/extra#hdr-MacOS.
+//
+// Disable Apple's native FTDI driver with:
+//  sudo kextunload -b com.apple.driver.AppleUSBFTDI
 //
 // That's it!
 //
 // Windows
 //
-// Good news, no configuration is needed, it'll work as-is.
+// Install the driver from http://www.ftdichip.com/Drivers/D2XX.htm.
+//
+// Good news, no configuration is needed, it'll work as-is!
 //
 // Supported products
 //
@@ -43,10 +57,15 @@
 // Troubleshooting
 //
 // See doc.go in
-// https://github.com/periph/extra/tree/master/experimental/devices/ftdi/ftd2xx
+// https://github.com/periph/extra/tree/master/experimental/devices/ftd2xx
 // for more developer links.
-package ftdi
+package ftd2xx
 
+// D2XX programmer's guide; Explains how to use the DLL provided by ftdi.
+// http://www.ftdichip.com/Support/Documents/ProgramGuides/D2XX_Programmer's_Guide(FT_000071).pdf
+//
+// D2XX samples; http://www.ftdichip.com/Support/SoftwareExamples/CodeExamples/VC.htm
+//
 // There is multiple ways to access a FT232H:
 //
 // - Some operating systems include a limited "serial port only" driver.

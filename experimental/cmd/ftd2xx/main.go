@@ -2,7 +2,7 @@
 // Use of this source code is governed under the Apache License, Version 2.0
 // that can be found in the LICENSE file.
 
-// ftdi prints out information about the FTDI devices found on the USB bus.
+// ftd2xx prints out information about the FTDI devices found on the USB bus.
 package main
 
 import (
@@ -13,13 +13,12 @@ import (
 	"log"
 	"os"
 
-	"periph.io/x/extra/experimental/devices/ftdi"
-	"periph.io/x/extra/experimental/devices/ftdi/ftd2xx"
+	"periph.io/x/extra/experimental/devices/ftd2xx"
 	"periph.io/x/periph/host"
 )
 
-func process(d ftdi.Dev) {
-	var i ftdi.Info
+func process(d ftd2xx.Dev) {
+	i := ftd2xx.Info{}
 	d.GetInfo(&i)
 	fmt.Printf("  Type:           %s\n", i.Type)
 	fmt.Printf("  Vendor ID:      %#04x\n", i.VenID)
@@ -96,12 +95,9 @@ func mainImpl() error {
 		return err
 	}
 
-	major, minor, build := ftd2xx.Driver.Version()
+	major, minor, build := ftd2xx.Version()
 	fmt.Printf("Using library %d.%d.%d\n", major, minor, build)
-	if err := ftdi.RegisterDriver(&ftd2xx.Driver); err != nil {
-		fmt.Fprintf(os.Stderr, "%v\n", err)
-	}
-	all := ftdi.All()
+	all := ftd2xx.All()
 	plural := ""
 	if len(all) > 1 {
 		plural = "s"
@@ -119,7 +115,7 @@ func mainImpl() error {
 
 func main() {
 	if err := mainImpl(); err != nil {
-		fmt.Fprintf(os.Stderr, "ftdi: %s.\n", err)
+		fmt.Fprintf(os.Stderr, "ftd2xx: %s.\n", err)
 		os.Exit(1)
 	}
 }

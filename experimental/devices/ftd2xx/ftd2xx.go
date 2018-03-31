@@ -2,30 +2,26 @@
 // Use of this source code is governed under the Apache License, Version 2.0
 // that can be found in the LICENSE file.
 
+// This file is the abstraction layer against the various OS specific
+// implementations.
+//
+// It converts the int error value into error type.
+
 package ftd2xx
 
 import (
 	"errors"
 	"fmt"
 	"unsafe"
-
-	"periph.io/x/extra/experimental/devices/ftdi"
 )
 
-// Driver implements ftdi.Driver.
-var Driver driver
-
-type driver struct {
-}
-
-// Version implements ftdi.Driver.
-func (d *driver) Version() (uint8, uint8, uint8) {
+// Version returns the version number of the D2xx driver currently used.
+func Version() (uint8, uint8, uint8) {
 	return getLibraryVersion()
 }
 
-// Open implements ftdi.Driver.
-func (d *driver) Open(i int) (ftdi.Handle, error) {
-	h, e := open(i)
+func openH(i int) (*device, error) {
+	h, e := openHandle(i)
 	if e != 0 {
 		return h, toErr("Open failed", e)
 	}
@@ -36,8 +32,7 @@ func (d *driver) Open(i int) (ftdi.Handle, error) {
 	return h, nil
 }
 
-// NumDevices implements ftdi.Driver.
-func (d *driver) NumDevices() (int, error) {
+func numDevices() (int, error) {
 	num, e := createDeviceInfoList()
 	if e != 0 {
 		return 0, toErr("GetNumDevices initialization failed", e)
@@ -47,7 +42,7 @@ func (d *driver) NumDevices() (int, error) {
 
 //
 
-// device implements ftdi.Handle.
+// device is the low level ftd2xx device handle.
 type device struct {
 	h              handle
 	t              devType
@@ -60,13 +55,11 @@ type device struct {
 	eeprom         []byte
 }
 
-// Close implements ftdi.Handle.
-func (d *device) Close() error {
+func (d *device) closeH() error {
 	return toErr("Close", d.closeHandle())
 }
 
-// GetInfo implements ftdi.Handle.
-func (d *device) GetInfo(i *ftdi.Info) {
+func (d *device) getI(i *Info) {
 	i.Type = d.t.String()
 	i.VenID = d.venID
 	i.ProductID = d.productID
@@ -140,8 +133,7 @@ func (d *device) GetInfo(i *ftdi.Info) {
 	}
 }
 
-// Reset implements ftdi.Handle.
-func (d *device) Reset() error {
+func (d *device) reset() error {
 	return toErr("Reset", d.resetDevice())
 }
 
@@ -162,8 +154,6 @@ func (d *device) read(b []byte) (int, error) {
 	n, e := d.doRead(b[:p])
 	return n, toErr("Read", e)
 }
-
-//
 
 // devType is the FTDI device type.
 type devType uint32
@@ -392,7 +382,7 @@ func toErr(s string, e int) error {
 	switch e {
 	case missing:
 		// when the library ftd2xx couldn't be loaded at runtime.
-		return errors.New("ftd2xx: couldn't load driver; visit https://github.com/periph/extra/tree/master/experimental/devices/ftdi/ftd2xx")
+		return errors.New("ftd2xx: couldn't load driver; visit https://github.com/periph/extra/tree/master/experimental/devices/ftd2xx")
 	case noCGO:
 		return errors.New("ftd2xx: can't be used without cgo")
 	case 0: // FT_OK
@@ -402,7 +392,7 @@ func toErr(s string, e int) error {
 	case 2: // FT_DEVICE_NOT_FOUND
 		return fmt.Errorf("ftd2xx: %s: device not found", s)
 	case 3: // FT_DEVICE_NOT_OPENED
-		return fmt.Errorf("ftd2xx: %s: device busy; see https://github.com/periph/extra/tree/master/experimental/devices/ftdi/ftd2xx for help", s)
+		return fmt.Errorf("ftd2xx: %s: device busy; see https://github.com/periph/extra/tree/master/experimental/devices/ftd2xx for help", s)
 	case 4: // FT_IO_ERROR
 		return fmt.Errorf("ftd2xx: %s: I/O error", s)
 	case 5: // FT_INSUFFICIENT_RESOURCES
@@ -439,5 +429,3 @@ func toErr(s string, e int) error {
 		return fmt.Errorf("ftd2xx: %s: unknown status %d", s, e)
 	}
 }
-
-var _ ftdi.Handle = &device{}

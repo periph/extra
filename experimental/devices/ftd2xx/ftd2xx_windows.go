@@ -31,7 +31,7 @@ func createDeviceInfoList() (int, int) {
 
 // Device functions.
 
-func open(i int) (*device, int) {
+func openHandle(i int) (*device, int) {
 	var h handle
 	if pOpen == nil {
 		return nil, missing
