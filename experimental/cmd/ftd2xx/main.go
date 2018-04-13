@@ -78,6 +78,11 @@ func process(d ftd2xx.Dev) {
 	default:
 	}
 	log.Printf("  Full struct:\n%#v\n", i)
+
+	hdr := d.Header()
+	for _, p := range hdr {
+		fmt.Printf("%s: %s\n", p, p.Function())
+	}
 }
 
 func mainImpl() error {

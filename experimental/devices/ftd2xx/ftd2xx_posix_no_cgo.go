@@ -35,6 +35,10 @@ func (d *device) getInfo() int {
 	return noCGO
 }
 
+func (d *device) setup() int {
+	return noCGO
+}
+
 func (d *device) d2xxGetQueueStatus() (uint32, int) {
 	return 0, noCGO
 }
@@ -43,8 +47,16 @@ func (d *device) d2xxRead(b []byte) (int, int) {
 	return 0, noCGO
 }
 
+func (d *device) d2xxWrite(b []byte) (int, int) {
+	return 0, noCGO
+}
+
 func (d *device) d2xxGetBitMode() (byte, int) {
 	return 0, noCGO
+}
+
+func (d *device) d2xxSetBitMode(mask, mode byte) int {
+	return noCGO
 }
 
 type handle uintptr

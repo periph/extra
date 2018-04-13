@@ -6,12 +6,26 @@
 // implementations.
 //
 // It converts the int error value into error type.
+//
+// D2XX programmer's guide; Explains how to use the DLL provided by ftdi.
+// http://www.ftdichip.com/Support/Documents/ProgramGuides/D2XX_Programmer's_Guide(FT_000071).pdf
+//
+// D2XX samples; http://www.ftdichip.com/Support/SoftwareExamples/CodeExamples/VC.htm
+//
+// There is multiple ways to access a FT232H:
+//
+// - Some operating systems include a limited "serial port only" driver.
+// - Future Technologic Devices International Ltd provides their own private
+//   source driver.
+// - FTDI also provides a "serial port only" driver surnamed VCP.
+// - https://www.intra2net.com/en/developer/libftdi/ is an open source driver,
+//   that is acknowledged by FTDI.
 
 package ftd2xx
 
 import (
 	"errors"
-	"fmt"
+	"strconv"
 	"unsafe"
 )
 
@@ -41,6 +55,23 @@ func openDev(i int) (*device, error) {
 	// Ignore the error code, when it fails, the device will be marked as "not
 	// opened".
 	_ = h.getInfo()
+
+	// Sets up USB parameters.
+	_ = h.setup()
+	_ = h.flushPending()
+
+	// Reset mode to setting in EEPROM.
+	// TODO(maruel): Eventually we may want to read the state and expose it
+	// instead, to not cause unwanted glitches.
+	_ = h.setBitMode(0, 0)
+	switch h.t {
+	case ft232H, ft2232H, ft4232H: // ft2232
+		_ = h.setupMPSSE()
+	case ft232R:
+		// CBus bitbang
+		_ = h.setBitMode(0, 0x20)
+	default:
+	}
 	return h, nil
 }
 
@@ -55,6 +86,7 @@ type device struct {
 	desc           string
 	serial         string
 	eeprom         []byte
+	isMPSSE        bool // if false, uses CBus bitbang
 }
 
 func (d *device) closeDev() error {
@@ -140,6 +172,18 @@ func (d *device) reset() error {
 	return toErr("Reset", d.d2xxResetDevice())
 }
 
+func (d *device) getBitMode() (byte, error) {
+	l, e := d.d2xxGetBitMode()
+	if e != 0 {
+		return 0, toErr("GetBitMode", e)
+	}
+	return l, nil
+}
+
+func (d *device) setBitMode(mask, mode byte) error {
+	return toErr("SetBitMode", d.d2xxSetBitMode(mask, mode))
+}
+
 func (d *device) flushPending() error {
 	p, e := d.d2xxGetQueueStatus()
 	if p == 0 || e != 0 {
@@ -154,8 +198,18 @@ func (d *device) read(b []byte) (int, error) {
 	if p == 0 || e != 0 {
 		return int(p), toErr("Read", e)
 	}
-	n, e := d.d2xxRead(b[:p])
+	v := int(p)
+	if v > len(b) {
+		v = len(b)
+	}
+	n, e := d.d2xxRead(b[:v])
 	return n, toErr("Read", e)
+}
+
+func (d *device) write(b []byte) (int, error) {
+	// Use a stronger guarantee that all bytes have been written.
+	n, e := d.d2xxWrite(b)
+	return n, toErr("Write", e)
 }
 
 // devType is the FTDI device type.
@@ -230,8 +284,6 @@ func (d devType) eepromSize() int {
 }
 
 // TODO(maruel): To add:
-// - FT_Read
-// - FT_Write
 // - FT_IoCtl
 // UART:
 // - FT_SetBaudRate
@@ -382,53 +434,55 @@ type eeprom_ft232r struct {
 }
 
 func toErr(s string, e int) error {
+	msg := ""
 	switch e {
 	case missing:
 		// when the library ftd2xx couldn't be loaded at runtime.
-		return errors.New("ftd2xx: couldn't load driver; visit https://github.com/periph/extra/tree/master/experimental/devices/ftd2xx")
+		msg = "couldn't load driver; visit https://github.com/periph/extra/tree/master/experimental/devices/ftd2xx"
 	case noCGO:
-		return errors.New("ftd2xx: can't be used without cgo")
+		msg = "can't be used without cgo"
 	case 0: // FT_OK
 		return nil
 	case 1: // FT_INVALID_HANDLE
-		return fmt.Errorf("ftd2xx: %s: invalid handle", s)
+		msg = "invalid handle"
 	case 2: // FT_DEVICE_NOT_FOUND
-		return fmt.Errorf("ftd2xx: %s: device not found", s)
+		msg = "device not found"
 	case 3: // FT_DEVICE_NOT_OPENED
-		return fmt.Errorf("ftd2xx: %s: device busy; see https://github.com/periph/extra/tree/master/experimental/devices/ftd2xx for help", s)
+		msg = "device busy; see https://github.com/periph/extra/tree/master/experimental/devices/ftd2xx for help"
 	case 4: // FT_IO_ERROR
-		return fmt.Errorf("ftd2xx: %s: I/O error", s)
+		msg = "I/O error"
 	case 5: // FT_INSUFFICIENT_RESOURCES
-		return fmt.Errorf("ftd2xx: %s: insufficient resources", s)
+		msg = "insufficient resources"
 	case 6: // FT_INVALID_PARAMETER
-		return fmt.Errorf("ftd2xx: %s: invalid parameter", s)
+		msg = "invalid parameter"
 	case 7: // FT_INVALID_BAUD_RATE
-		return fmt.Errorf("ftd2xx: %s: invalid baud rate", s)
+		msg = "invalid baud rate"
 	case 8: // FT_DEVICE_NOT_OPENED_FOR_ERASE
-		return fmt.Errorf("ftd2xx: %s: device not opened for erase", s)
+		msg = "device not opened for erase"
 	case 9: // FT_DEVICE_NOT_OPENED_FOR_WRITE
-		return fmt.Errorf("ftd2xx: %s: device not opened for write", s)
+		msg = "device not opened for write"
 	case 10: // FT_FAILED_TO_WRITE_DEVICE
-		return fmt.Errorf("ftd2xx: %s: failed to write device", s)
+		msg = "failed to write device"
 	case 11: // FT_EEPROM_READ_FAILED
-		return fmt.Errorf("ftd2xx: %s: eeprom read failed", s)
+		msg = "eeprom read failed"
 	case 12: // FT_EEPROM_WRITE_FAILED
-		return fmt.Errorf("ftd2xx: %s: eeprom write failed", s)
+		msg = "eeprom write failed"
 	case 13: // FT_EEPROM_ERASE_FAILED
-		return fmt.Errorf("ftd2xx: %s: eeprom erase failed", s)
+		msg = "eeprom erase failed"
 	case 14: // FT_EEPROM_NOT_PRESENT
-		return fmt.Errorf("ftd2xx: %s: eeprom not present", s)
+		msg = "eeprom not present"
 	case 15: // FT_EEPROM_NOT_PROGRAMMED
-		return fmt.Errorf("ftd2xx: %s: eeprom not programmed", s)
+		msg = "eeprom not programmed"
 	case 16: // FT_INVALID_ARGS
-		return fmt.Errorf("ftd2xx: %s: invalid argument", s)
+		msg = "invalid argument"
 	case 17: // FT_NOT_SUPPORTED
-		return fmt.Errorf("ftd2xx: %s: not supported", s)
+		msg = "not supported"
 	case 18: // FT_OTHER_ERROR
-		return fmt.Errorf("ftd2xx: %s: other error", s)
+		msg = "other error"
 	case 19: // FT_DEVICE_LIST_NOT_READY
-		return fmt.Errorf("ftd2xx: %s: device list not ready", s)
+		msg = "device list not ready"
 	default:
-		return fmt.Errorf("ftd2xx: %s: unknown status %d", s, e)
+		msg = "unknown status " + strconv.Itoa(e)
 	}
+	return errors.New("ftd2xx: " + s + ": " + msg)
 }

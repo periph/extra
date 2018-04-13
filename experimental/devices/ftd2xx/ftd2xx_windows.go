@@ -93,6 +93,23 @@ func (d *device) getInfo() int {
 	return 0
 }
 
+func (d *device) setup() int {
+	if pSetChars == nil || pSetTimeouts == nil || pSetLatencyTimer == nil {
+		return missing
+	}
+	// Disable event/error characters.
+	if r1, _, _ := pSetChars.Call(d.toH(), 0, 0, 0, 0); r1 != 0 {
+		return int(r1)
+	}
+	// Set I/O timeouts to 5 sec.
+	if r1, _, _ := pSetTimeouts.Call(d.toH(), 5000, 5000); r1 != 0 {
+		return int(r1)
+	}
+	// Latency timer at default 16ms.
+	r1, _, _ := pSetLatencyTimer.Call(d.toH(), 16)
+	return int(r1)
+}
+
 func (d *device) d2xxGetQueueStatus() (uint32, int) {
 	if pGetQueueStatus == nil {
 		return 0, missing
@@ -106,7 +123,18 @@ func (d *device) d2xxRead(b []byte) (int, int) {
 	if pRead == nil {
 		return 0, missing
 	}
-	return 0, missing
+	var bytesRead uint32
+	r1, _, _ := pRead.Call(d.toH(), uintptr(unsafe.Pointer(&b[0])), uintptr(len(b)), uintptr(unsafe.Pointer(&bytesRead)))
+	return 0, int(r1)
+}
+
+func (d *device) d2xxWrite(b []byte) (int, int) {
+	if pWrite == nil {
+		return 0, missing
+	}
+	var bytesSent uint32
+	r1, _, _ := pWrite.Call(d.toH(), uintptr(unsafe.Pointer(&b[0])), uintptr(len(b)), uintptr(unsafe.Pointer(&bytesSent)))
+	return 0, int(r1)
 }
 
 func (d *device) d2xxGetBitMode() (byte, int) {
@@ -116,6 +144,14 @@ func (d *device) d2xxGetBitMode() (byte, int) {
 	var s uint8
 	r1, _, _ := pGetBitMode.Call(d.toH(), uintptr(unsafe.Pointer(&s)))
 	return s, int(r1)
+}
+
+func (d *device) d2xxSetBitMode(mask, mode byte) int {
+	if pSetBitMode == nil {
+		return missing
+	}
+	r1, _, _ := pSetBitMode.Call(d.toH(), uintptr(mask), uintptr(mode))
+	return int(r1)
 }
 
 func (d *device) toH() uintptr {
@@ -139,6 +175,10 @@ var (
 	pRead                 *syscall.Proc
 	pResetDevice          *syscall.Proc
 	pSetBitMode           *syscall.Proc
+	pSetChars             *syscall.Proc
+	pSetLatencyTimer      *syscall.Proc
+	pSetTimeouts          *syscall.Proc
+	pWrite                *syscall.Proc
 )
 
 func init() {
@@ -154,6 +194,10 @@ func init() {
 		pRead, _ = dll.FindProc("FT_Read")
 		pResetDevice, _ = dll.FindProc("FT_ResetDevice")
 		pSetBitMode, _ = dll.FindProc("FT_SetBitMode")
+		pSetChars, _ = dll.FindProc("FT_SetChars")
+		pSetLatencyTimer, _ = dll.FindProc("FT_SetLatencyTimer")
+		pSetTimeouts, _ = dll.FindProc("FT_SetTimeouts")
+		pWrite, _ = dll.FindProc("FT_Write")
 	}
 }
 

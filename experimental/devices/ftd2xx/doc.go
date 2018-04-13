@@ -56,39 +56,7 @@
 //
 // Troubleshooting
 //
-// See doc.go in
+// See sources in
 // https://github.com/periph/extra/tree/master/experimental/devices/ftd2xx
 // for more developer links.
 package ftd2xx
-
-// D2XX programmer's guide; Explains how to use the DLL provided by ftdi.
-// http://www.ftdichip.com/Support/Documents/ProgramGuides/D2XX_Programmer's_Guide(FT_000071).pdf
-//
-// D2XX samples; http://www.ftdichip.com/Support/SoftwareExamples/CodeExamples/VC.htm
-//
-// There is multiple ways to access a FT232H:
-//
-// - Some operating systems include a limited "serial port only" driver.
-// - Future Technologic Devices International Ltd provides their own private
-//   source driver.
-// - FTDI also provides a "serial port only" driver surnamed VCP.
-// - https://www.intra2net.com/en/developer/libftdi/ is an open source driver,
-//   that is acknowledged by FTDI.
-//
-// Interfacing I²C:
-// http://www.ftdichip.com/Support/Documents/AppNotes/AN_113_FTDI_Hi_Speed_USB_To_I2C_Example.pdf
-//
-// Interfacing SPI:
-// http://www.ftdichip.com/Support/Documents/AppNotes/AN_114_FTDI_Hi_Speed_USB_To_SPI_Example.pdf
-//
-// Interfacing JTAG:
-// http://www.ftdichip.com/Support/Documents/AppNotes/AN_129_FTDI_Hi_Speed_USB_To_JTAG_Example.pdf
-//
-// Interfacing parallel port:
-// http://www.ftdichip.com/Support/Documents/AppNotes/AN_167_FT1248_Parallel_Serial_Interface_Basics.pdf
-//
-// MPSSE basics:
-// http://www.ftdichip.com/Support/Documents/AppNotes/AN_135_MPSSE_Basics.pdf
-//
-// MPSSE and MCU emulation modes:
-// http://www.ftdichip.com/Support/Documents/AppNotes/AN_108_Command_Processor_for_MPSSE_and_MCU_Host_Bus_Emulation_Modes.pdf

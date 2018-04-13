@@ -4,6 +4,9 @@
 
 // This functionality requires MPSSE.
 //
+// Interfacing I²C:
+// http://www.ftdichip.com/Support/Documents/AppNotes/AN_113_FTDI_Hi_Speed_USB_To_I2C_Example.pdf
+//
 // Implementation based on
 // http://www.ftdichip.com/Support/Documents/AppNotes/AN_255_USB%20to%20I2C%20Example%20using%20the%20FT232H%20and%20FT201X%20devices.pdf
 //

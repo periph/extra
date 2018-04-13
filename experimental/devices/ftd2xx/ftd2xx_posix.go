@@ -93,6 +93,19 @@ func (d *device) getInfo() int {
 	return 0
 }
 
+func (d *device) setup() int {
+	// Disable event/error characters.
+	if e := C.FT_SetChars(d.toH(), 0, 0, 0, 0); e != 0 {
+		return int(e)
+	}
+	// Set I/O timeouts to 5 sec.
+	if e := C.FT_SetTimeouts(d.toH(), 5000, 5000); e != 0 {
+		return int(e)
+	}
+	// Latency timer at default 16ms.
+	return int(C.FT_SetLatencyTimer(d.toH(), 16))
+}
+
 func (d *device) d2xxGetQueueStatus() (uint32, int) {
 	var v C.DWORD
 	e := C.FT_GetQueueStatus(d.toH(), &v)
@@ -100,14 +113,25 @@ func (d *device) d2xxGetQueueStatus() (uint32, int) {
 }
 
 func (d *device) d2xxRead(b []byte) (int, int) {
-	// FT_Read(d.toH(), &b[0], len(b), &bytesRead);
-	return 0, missing
+	var bytesRead C.DWORD
+	e := C.FT_Read(d.toH(), C.LPVOID(unsafe.Pointer(&b[0])), C.DWORD(len(b)), &bytesRead)
+	return int(bytesRead), int(e)
+}
+
+func (d *device) d2xxWrite(b []byte) (int, int) {
+	var bytesSent C.DWORD
+	e := C.FT_Write(d.toH(), C.LPVOID(unsafe.Pointer(&b[0])), C.DWORD(len(b)), &bytesSent)
+	return int(bytesSent), int(e)
 }
 
 func (d *device) d2xxGetBitMode() (byte, int) {
 	var s C.UCHAR
 	e := C.FT_GetBitMode(d.toH(), &s)
 	return uint8(s), int(e)
+}
+
+func (d *device) d2xxSetBitMode(mask, mode byte) int {
+	return int(C.FT_SetBitMode(d.toH(), C.UCHAR(mask), C.UCHAR(mode)))
 }
 
 func (d *device) toH() C.FT_HANDLE {
