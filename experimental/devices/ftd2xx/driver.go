@@ -33,7 +33,7 @@ var (
 //
 // Must be called with mu held.
 func open(i int) (Dev, error) {
-	h, err := openH(i)
+	h, err := openDev(i)
 	if err != nil {
 		return nil, err
 	}
@@ -98,6 +98,7 @@ func (d *driver) Init() (bool, error) {
 		return true, err
 	}
 	for i := 0; i < num; i++ {
+		// TODO(maruel): Close the device one day. :)
 		if d, err1 := open(i); err1 == nil {
 			all = append(all, d)
 		} else {

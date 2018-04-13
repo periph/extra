@@ -9,25 +9,25 @@ package ftd2xx
 
 // Library functions.
 
-func getLibraryVersion() (uint8, uint8, uint8) {
+func d2xxGetLibraryVersion() (uint8, uint8, uint8) {
 	return 0, 0, 0
 }
 
-func createDeviceInfoList() (int, int) {
+func d2xxCreateDeviceInfoList() (int, int) {
 	return 0, noCGO
 }
 
 // Device functions.
 
-func openHandle(i int) (*device, int) {
+func d2xxOpen(i int) (*device, int) {
 	return nil, noCGO
 }
 
-func (d *device) closeHandle() int {
+func (d *device) d2xxClose() int {
 	return noCGO
 }
 
-func (d *device) resetDevice() int {
+func (d *device) d2xxResetDevice() int {
 	return noCGO
 }
 
@@ -35,15 +35,15 @@ func (d *device) getInfo() int {
 	return noCGO
 }
 
-func (d *device) getReadPending() (int, int) {
+func (d *device) d2xxGetQueueStatus() (uint32, int) {
 	return 0, noCGO
 }
 
-func (d *device) doRead(b []byte) (int, int) {
+func (d *device) d2xxRead(b []byte) (int, int) {
 	return 0, noCGO
 }
 
-func (d *device) getBits() (byte, int) {
+func (d *device) d2xxGetBitMode() (byte, int) {
 	return 0, noCGO
 }
 

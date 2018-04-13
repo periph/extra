@@ -12,7 +12,7 @@ import (
 
 // Library functions.
 
-func getLibraryVersion() (uint8, uint8, uint8) {
+func d2xxGetLibraryVersion() (uint8, uint8, uint8) {
 	var v uint32
 	if pGetLibraryVersion != nil {
 		pGetLibraryVersion.Call(uintptr(unsafe.Pointer(&v)))
@@ -20,7 +20,7 @@ func getLibraryVersion() (uint8, uint8, uint8) {
 	return uint8(v >> 16), uint8(v >> 8), uint8(v)
 }
 
-func createDeviceInfoList() (int, int) {
+func d2xxCreateDeviceInfoList() (int, int) {
 	if pCreateDeviceInfoList == nil {
 		return 0, missing
 	}
@@ -31,7 +31,7 @@ func createDeviceInfoList() (int, int) {
 
 // Device functions.
 
-func openHandle(i int) (*device, int) {
+func d2xxOpen(i int) (*device, int) {
 	var h handle
 	if pOpen == nil {
 		return nil, missing
@@ -40,7 +40,7 @@ func openHandle(i int) (*device, int) {
 	return &device{h: h}, int(r1)
 }
 
-func (d *device) closeHandle() int {
+func (d *device) d2xxClose() int {
 	if pClose == nil {
 		return missing
 	}
@@ -48,7 +48,7 @@ func (d *device) closeHandle() int {
 	return int(r1)
 }
 
-func (d *device) resetDevice() int {
+func (d *device) d2xxResetDevice() int {
 	if pResetDevice == nil {
 		return missing
 	}
@@ -93,21 +93,23 @@ func (d *device) getInfo() int {
 	return 0
 }
 
-func (d *device) getReadPending() (int, int) {
+func (d *device) d2xxGetQueueStatus() (uint32, int) {
 	if pGetQueueStatus == nil {
 		return 0, missing
 	}
-	return 0, missing
+	var v uint32
+	r1, _, _ := pGetBitMode.Call(d.toH(), uintptr(unsafe.Pointer(&v)))
+	return v, int(r1)
 }
 
-func (d *device) doRead(b []byte) (int, int) {
+func (d *device) d2xxRead(b []byte) (int, int) {
 	if pRead == nil {
 		return 0, missing
 	}
 	return 0, missing
 }
 
-func (d *device) getBits() (byte, int) {
+func (d *device) d2xxGetBitMode() (byte, int) {
 	if pGetBitMode == nil {
 		return 0, missing
 	}
@@ -121,47 +123,37 @@ func (d *device) toH() uintptr {
 }
 
 // handle is a d2xx handle.
-//
-// TODO(maruel): Convert to type alias once go 1.9+ is required.
 type handle uintptr
 
 //
 
 var (
-	// Library functions.
-	pGetLibraryVersion    *syscall.Proc
+	pClose                *syscall.Proc
 	pCreateDeviceInfoList *syscall.Proc
-	//pGetDeviceInfoList    *syscall.Proc
-
-	// Device functions.
-	pOpen           *syscall.Proc
-	pClose          *syscall.Proc
-	pResetDevice    *syscall.Proc
-	pGetDeviceInfo  *syscall.Proc
-	pEEPROMRead     *syscall.Proc
-	pGetBitMode     *syscall.Proc
-	pSetBitMode     *syscall.Proc
-	pGetQueueStatus *syscall.Proc
-	pRead           *syscall.Proc
+	pEEPROMRead           *syscall.Proc
+	pGetBitMode           *syscall.Proc
+	pGetDeviceInfo        *syscall.Proc
+	pGetLibraryVersion    *syscall.Proc
+	pGetQueueStatus       *syscall.Proc
+	pOpen                 *syscall.Proc
+	pRead                 *syscall.Proc
+	pResetDevice          *syscall.Proc
+	pSetBitMode           *syscall.Proc
 )
 
 func init() {
 	if dll, _ := syscall.LoadDLL("ftd2xx.dll"); dll != nil {
-		// Library functions.
-		pGetLibraryVersion, _ = dll.FindProc("FT_GetLibraryVersion")
-		pCreateDeviceInfoList, _ = dll.FindProc("FT_CreateDeviceInfoList")
-		//pGetDeviceInfoList, _ = dll.FindProc("FT_GetDeviceInfoList")
-
-		// Device functions.
-		pOpen, _ = dll.FindProc("FT_Open")
 		pClose, _ = dll.FindProc("FT_Close")
-		pResetDevice, _ = dll.FindProc("FT_ResetDevice")
-		pGetDeviceInfo, _ = dll.FindProc("FT_GetDeviceInfo")
+		pCreateDeviceInfoList, _ = dll.FindProc("FT_CreateDeviceInfoList")
 		pEEPROMRead, _ = dll.FindProc("FT_EEPROM_Read")
 		pGetBitMode, _ = dll.FindProc("FT_GetBitMode")
-		pSetBitMode, _ = dll.FindProc("FT_SetBitMode")
+		pGetDeviceInfo, _ = dll.FindProc("FT_GetDeviceInfo")
+		pGetLibraryVersion, _ = dll.FindProc("FT_GetLibraryVersion")
 		pGetQueueStatus, _ = dll.FindProc("FT_GetQueueStatus")
+		pOpen, _ = dll.FindProc("FT_Open")
 		pRead, _ = dll.FindProc("FT_Read")
+		pResetDevice, _ = dll.FindProc("FT_ResetDevice")
+		pSetBitMode, _ = dll.FindProc("FT_SetBitMode")
 	}
 }
 

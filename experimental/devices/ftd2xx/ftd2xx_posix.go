@@ -16,13 +16,13 @@ import (
 
 // Library functions.
 
-func getLibraryVersion() (uint8, uint8, uint8) {
+func d2xxGetLibraryVersion() (uint8, uint8, uint8) {
 	var v C.DWORD
 	C.FT_GetLibraryVersion(&v)
 	return uint8(v >> 16), uint8(v >> 8), uint8(v)
 }
 
-func createDeviceInfoList() (int, int) {
+func d2xxCreateDeviceInfoList() (int, int) {
 	var num C.DWORD
 	e := C.FT_CreateDeviceInfoList(&num)
 	return int(num), int(e)
@@ -30,7 +30,7 @@ func createDeviceInfoList() (int, int) {
 
 // Device functions.
 
-func openHandle(i int) (*device, int) {
+func d2xxOpen(i int) (*device, int) {
 	var h C.FT_HANDLE
 	e := C.FT_Open(C.int(i), &h)
 	if uintptr(h) == 0 && e == 0 {
@@ -39,12 +39,12 @@ func openHandle(i int) (*device, int) {
 	return &device{h: handle(h)}, int(e)
 }
 
-func (d *device) closeHandle() int {
+func (d *device) d2xxClose() int {
 	e := C.FT_Close(d.toH())
 	return int(e)
 }
 
-func (d *device) resetDevice() int {
+func (d *device) d2xxResetDevice() int {
 	e := C.FT_ResetDevice(d.toH())
 	return int(e)
 }
@@ -93,17 +93,18 @@ func (d *device) getInfo() int {
 	return 0
 }
 
-func (d *device) getReadPending() (int, int) {
-	// C.FT_GetQueueStatus(d.toH(), &pendingBytes);
-	return 0, missing
+func (d *device) d2xxGetQueueStatus() (uint32, int) {
+	var v C.DWORD
+	e := C.FT_GetQueueStatus(d.toH(), &v)
+	return uint32(v), int(e)
 }
 
-func (d *device) doRead(b []byte) (int, int) {
+func (d *device) d2xxRead(b []byte) (int, int) {
 	// FT_Read(d.toH(), &b[0], len(b), &bytesRead);
 	return 0, missing
 }
 
-func (d *device) getBits() (byte, int) {
+func (d *device) d2xxGetBitMode() (byte, int) {
 	var s C.UCHAR
 	e := C.FT_GetBitMode(d.toH(), &s)
 	return uint8(s), int(e)
@@ -114,6 +115,4 @@ func (d *device) toH() C.FT_HANDLE {
 }
 
 // handle is a d2xx handle.
-//
-// TODO(maruel): Convert to type alias once go 1.9+ is required.
 type handle C.FT_HANDLE

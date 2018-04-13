@@ -17,11 +17,23 @@ import (
 
 // Version returns the version number of the D2xx driver currently used.
 func Version() (uint8, uint8, uint8) {
-	return getLibraryVersion()
+	return d2xxGetLibraryVersion()
 }
 
-func openH(i int) (*device, error) {
-	h, e := openHandle(i)
+//
+
+func numDevices() (int, error) {
+	num, e := d2xxCreateDeviceInfoList()
+	if e != 0 {
+		return 0, toErr("GetNumDevices initialization failed", e)
+	}
+	return num, nil
+}
+
+//
+
+func openDev(i int) (*device, error) {
+	h, e := d2xxOpen(i)
 	if e != 0 {
 		return h, toErr("Open failed", e)
 	}
@@ -31,16 +43,6 @@ func openH(i int) (*device, error) {
 	_ = h.getInfo()
 	return h, nil
 }
-
-func numDevices() (int, error) {
-	num, e := createDeviceInfoList()
-	if e != 0 {
-		return 0, toErr("GetNumDevices initialization failed", e)
-	}
-	return num, nil
-}
-
-//
 
 // device is the low level ftd2xx device handle.
 type device struct {
@@ -55,8 +57,9 @@ type device struct {
 	eeprom         []byte
 }
 
-func (d *device) closeH() error {
-	return toErr("Close", d.closeHandle())
+func (d *device) closeDev() error {
+	// Not yet called.
+	return toErr("Close", d.d2xxClose())
 }
 
 func (d *device) getI(i *Info) {
@@ -134,24 +137,24 @@ func (d *device) getI(i *Info) {
 }
 
 func (d *device) reset() error {
-	return toErr("Reset", d.resetDevice())
+	return toErr("Reset", d.d2xxResetDevice())
 }
 
 func (d *device) flushPending() error {
-	p, e := d.getReadPending()
+	p, e := d.d2xxGetQueueStatus()
 	if p == 0 || e != 0 {
 		return toErr("FlushPending", e)
 	}
-	_, e = d.doRead(make([]byte, p))
+	_, e = d.d2xxRead(make([]byte, p))
 	return toErr("FlushPending", e)
 }
 
 func (d *device) read(b []byte) (int, error) {
-	p, e := d.getReadPending()
+	p, e := d.d2xxGetQueueStatus()
 	if p == 0 || e != 0 {
-		return p, toErr("Read", e)
+		return int(p), toErr("Read", e)
 	}
-	n, e := d.doRead(b[:p])
+	n, e := d.d2xxRead(b[:p])
 	return n, toErr("Read", e)
 }
 
