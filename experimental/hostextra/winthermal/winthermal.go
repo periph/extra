@@ -8,17 +8,33 @@
 package winthermal
 
 import (
+	"errors"
+	"time"
+
 	"periph.io/x/periph"
 	"periph.io/x/periph/devices"
 )
 
+// Dev represents an handle to a WMI based sensor.
+//
+// Dev implements devices.Environmental.
 type Dev struct {
 	h obj
 }
 
+// Halt implements conn.Resource.
+func (d *Dev) Halt() error {
+	return nil
+}
+
+// Sense implements devices.Environmental.
 func (d *Dev) Sense(env *devices.Environment) error {
 	env.Temperature = devices.Celsius(d.h.CurrentTemperature)
 	return nil
+}
+
+func (d *Dev) SenseContinuous(interval time.Duration) (<-chan devices.Environment, error) {
+	return nil, errors.New("winthermal: not implemented yet")
 }
 
 //
@@ -47,3 +63,4 @@ func (d *driver) Init() (bool, error) {
 }
 
 var _ periph.Driver = &driver{}
+var _ devices.Environmental = &Dev{}

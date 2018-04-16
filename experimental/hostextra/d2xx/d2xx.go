@@ -111,14 +111,14 @@ func (d *device) getI(i *Info) {
 		// Use the custom structs instead of the ones provided by the library. The
 		// reason is that it had to be written for Windows anyway, and this enables
 		// using a single code path everywhere.
-		hdr := (*eeprom_header)(unsafe.Pointer(&d.eeprom[0]))
+		hdr := (*eepromHeader)(unsafe.Pointer(&d.eeprom[0]))
 		i.MaxPower = uint16(hdr.MaxPower)
 		i.SelfPowered = hdr.SelfPowered != 0
 		i.RemoteWakeup = hdr.RemoteWakeup != 0
 		i.PullDownEnable = hdr.PullDownEnable != 0
 		switch d.t {
 		case ft232H:
-			h := (*eeprom_ft232h)(unsafe.Pointer(&d.eeprom[0]))
+			h := (*eepromFt232h)(unsafe.Pointer(&d.eeprom[0]))
 			i.CSlowSlew = h.ACSlowSlew != 0
 			i.CSchmittInput = h.ACSchmittInput != 0
 			i.CDriveCurrent = uint8(h.ACDriveCurrent)
@@ -145,7 +145,7 @@ func (d *device) getI(i *Info) {
 			i.PowerSaveEnable = h.PowerSaveEnable != 0
 			i.DriverType = uint8(h.DriverType)
 		case ft232R:
-			h := (*eeprom_ft232r)(unsafe.Pointer(&d.eeprom[0]))
+			h := (*eepromFt232r)(unsafe.Pointer(&d.eeprom[0]))
 			i.IsHighCurrent = h.IsHighCurrent != 0
 			i.UseExtOsc = h.UseExtOsc != 0
 			i.InvertTXD = h.InvertTXD != 0
@@ -348,23 +348,23 @@ const (
 
 // For FT_EE_Program with FT_PROGRAM_DATA.
 const (
-	ft232H_CBusTristate = 0x00 // Tristate
-	ft232H_CBusTxled    = 0x01 // Tx LED
-	ft232H_CBusRxled    = 0x02 // Rx LED
-	ft232H_CBusTxrxled  = 0x03 // Tx and Rx LED
-	ft232H_CBusPwren    = 0x04 // Power Enable
-	ft232H_CBusSleep    = 0x05 // Sleep
-	ft232H_CBusDrive_0  = 0x06 // Drive pin to logic 0
-	ft232H_CBusDrive_1  = 0x07 // Drive pin to logic 1
-	ft232H_CBusIomode   = 0x08 // IO Mode for CBUS bit-bang
-	ft232H_CBusTxden    = 0x09 // Tx Data Enable
-	ft232H_CBusClk30    = 0x0A // 30MHz clock
-	ft232H_CBusClk15    = 0x0B // 15MHz clock
-	ft232H_CBusClk7_5   = 0x0C // 7.5MHz clock
+	ft232HCBusTristate = 0x00 // Tristate
+	ft232HCBusTxled    = 0x01 // Tx LED
+	ft232HCBusRxled    = 0x02 // Rx LED
+	ft232HCBusTxrxled  = 0x03 // Tx and Rx LED
+	ft232HCBusPwren    = 0x04 // Power Enable
+	ft232HCBusSleep    = 0x05 // Sleep
+	ft232HCBusDrive0   = 0x06 // Drive pin to logic 0
+	ft232HCBusDrive1   = 0x07 // Drive pin to logic 1
+	ft232HCBusIomode   = 0x08 // IO Mode for CBUS bit-bang
+	ft232HCBusTxden    = 0x09 // Tx Data Enable
+	ft232HCBusClk30    = 0x0A // 30MHz clock
+	ft232HCBusClk15    = 0x0B // 15MHz clock
+	ft232HCBusClk7dot5 = 0x0C // 7.5MHz clock
 )
 
-// eeprom_header is FT_EEPROM_HEADER.
-type eeprom_header struct {
+// eepromHeader is FT_EEPROM_HEADER.
+type eepromHeader struct {
 	deviceType     devType // FTxxxx device type to be programmed
 	VendorID       uint16  // Defaults to 0x0403; can be changed.
 	ProductID      uint16  // Defaults to 0x6001 for ft232h, relevant value.
@@ -375,9 +375,9 @@ type eeprom_header struct {
 	PullDownEnable uint8   //
 }
 
-// eeprom_ft232h is FT_EEPROM_232H
-type eeprom_ft232h struct {
-	// eeprom_header
+// eepromFt232h is FT_EEPROM_232H
+type eepromFt232h struct {
+	// eepromHeader
 	deviceType     devType // FTxxxx device type to be programmed
 	VendorID       uint16  // 0x0403
 	ProductID      uint16  // 0x6001
@@ -415,9 +415,9 @@ type eeprom_ft232h struct {
 	DriverType        uint8 //
 }
 
-// eeprom_ft232r is FT_EEPROM_232R
-type eeprom_ft232r struct {
-	// eeprom_header
+// eepromFt232r is FT_EEPROM_232R
+type eepromFt232r struct {
+	// eepromHeader
 	deviceType     devType // FTxxxx device type to be programmed
 	VendorID       uint16  // 0x0403
 	ProductID      uint16  // 0x6001

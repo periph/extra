@@ -79,7 +79,7 @@ func (d *device) getInfo() int {
 
 	d.eeprom = make([]byte, d.t.eepromSize())
 	eepromVoid := unsafe.Pointer(&d.eeprom[0])
-	hdr := (*eeprom_header)(eepromVoid)
+	hdr := (*eepromHeader)(eepromVoid)
 	// It MUST be set here. This is not always the case on posix.
 	hdr.deviceType = d.t
 	if r1, _, _ := pEEPROMRead.Call(d.toH(), uintptr(eepromVoid), uintptr(len(d.eeprom)), m, mi, de, s); r1 != 0 {

@@ -67,7 +67,7 @@ func (d *device) getInfo() int {
 	var serial [64]C.char
 	d.eeprom = make([]byte, d.t.eepromSize())
 	eepromVoid := unsafe.Pointer(&d.eeprom[0])
-	hdr := (*eeprom_header)(eepromVoid)
+	hdr := (*eepromHeader)(eepromVoid)
 
 	// There something odd going on here.
 	//
