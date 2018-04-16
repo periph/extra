@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"os"
 
-	"periph.io/x/extra/experimental/host/usbbus"
+	"periph.io/x/extra/experimental/hostextra/usbbus"
 	"periph.io/x/periph/host"
 )
 
