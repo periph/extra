@@ -2,11 +2,8 @@
 // Use of this source code is governed under the Apache License, Version 2.0
 // that can be found in the LICENSE file.
 
-// Package ftd2xx implements support for various Future Technology devices like
+// Package d2xx implements support for various Future Technology devices like
 // the FT232H USB GPIO, I²C, SPI, CAN, UART, JTAG bus via its D2XX driver.
-//
-// It currently leverages subpackage ftd2xx but it is designed to be ported to
-// the open source library libftdi.
 //
 // Debian
 //
@@ -20,7 +17,7 @@
 //
 // Permanent: Reconnect your device after running the following command:
 //
-//  cd $GOPATH/src/periph.io/x/extra/experimental/devices/ftd2xx
+//  cd $GOPATH/src/periph.io/x/extra/experimental/hostextra/d2xx
 //  sudo cp debian/d98-ft232h.rules /etc/udev/rules.d/
 //  sudo udevadm control --reload-rules
 //  sudo udevadm trigger --verbose
@@ -57,6 +54,6 @@
 // Troubleshooting
 //
 // See sources in
-// https://github.com/periph/extra/tree/master/experimental/devices/ftd2xx
+// https://github.com/periph/extra/tree/master/experimental/hostextra/d2xx
 // for more developer links.
-package ftd2xx
+package d2xx

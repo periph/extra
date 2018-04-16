@@ -12,7 +12,7 @@
 //
 // Page 18: MPSSE does not automatically support clock stretching for I²C.
 
-package ftd2xx
+package d2xx
 
 /*
 // Page 10-11.

@@ -2,7 +2,7 @@
 // Use of this source code is governed under the Apache License, Version 2.0
 // that can be found in the LICENSE file.
 
-package ftd2xx
+package d2xx
 
 import (
 	"errors"
@@ -235,7 +235,7 @@ func (f *FT232H) Header() []gpio.PinIO {
 // 0 direction means input, 1 means output.
 func (f *FT232H) CBus(direction, value byte) error {
 	if f.h == nil {
-		return errors.New("ftd2xx: device is not opened")
+		return errors.New("d2xx: device is not opened")
 	}
 	return f.h.mpsseCBus(direction, value)
 }
@@ -247,7 +247,7 @@ func (f *FT232H) CBus(direction, value byte) error {
 // This function must be used to set Clock idle level.
 func (f *FT232H) DBus(direction, value byte) error {
 	if f.h == nil {
-		return errors.New("ftd2xx: device is not opened")
+		return errors.New("d2xx: device is not opened")
 	}
 	return f.h.mpsseDBus(direction, value)
 }
@@ -255,7 +255,7 @@ func (f *FT232H) DBus(direction, value byte) error {
 // CBusRead reads the values of C0 to C7.
 func (f *FT232H) CBusRead() (byte, error) {
 	if f.h == nil {
-		return 0, errors.New("ftd2xx: device is not opened")
+		return 0, errors.New("d2xx: device is not opened")
 	}
 	return f.h.mpsseCBusRead()
 }
@@ -263,7 +263,7 @@ func (f *FT232H) CBusRead() (byte, error) {
 // DBusRead reads the values of D0 to D7.
 func (f *FT232H) DBusRead() (byte, error) {
 	if f.h == nil {
-		return 0, errors.New("ftd2xx: device is not opened")
+		return 0, errors.New("d2xx: device is not opened")
 	}
 	return f.h.mpsseDBusRead()
 }

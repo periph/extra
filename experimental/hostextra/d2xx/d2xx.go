@@ -21,7 +21,7 @@
 // - https://www.intra2net.com/en/developer/libftdi/ is an open source driver,
 //   that is acknowledged by FTDI.
 
-package ftd2xx
+package d2xx
 
 import (
 	"errors"
@@ -75,7 +75,7 @@ func openDev(i int) (*device, error) {
 	return h, nil
 }
 
-// device is the low level ftd2xx device handle.
+// device is the low level d2xx device handle.
 type device struct {
 	h              handle
 	t              devType
@@ -437,8 +437,8 @@ func toErr(s string, e int) error {
 	msg := ""
 	switch e {
 	case missing:
-		// when the library ftd2xx couldn't be loaded at runtime.
-		msg = "couldn't load driver; visit https://github.com/periph/extra/tree/master/experimental/devices/ftd2xx"
+		// when the library d2xx couldn't be loaded at runtime.
+		msg = "couldn't load driver; visit https://github.com/periph/extra/tree/master/experimental/hostextra/d2xx"
 	case noCGO:
 		msg = "can't be used without cgo"
 	case 0: // FT_OK
@@ -448,7 +448,7 @@ func toErr(s string, e int) error {
 	case 2: // FT_DEVICE_NOT_FOUND
 		msg = "device not found"
 	case 3: // FT_DEVICE_NOT_OPENED
-		msg = "device busy; see https://github.com/periph/extra/tree/master/experimental/devices/ftd2xx for help"
+		msg = "device busy; see https://github.com/periph/extra/tree/master/experimental/hostextra/d2xx for help"
 	case 4: // FT_IO_ERROR
 		msg = "I/O error"
 	case 5: // FT_INSUFFICIENT_RESOURCES
@@ -484,5 +484,5 @@ func toErr(s string, e int) error {
 	default:
 		msg = "unknown status " + strconv.Itoa(e)
 	}
-	return errors.New("ftd2xx: " + s + ": " + msg)
+	return errors.New("d2xx: " + s + ": " + msg)
 }

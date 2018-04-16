@@ -2,6 +2,11 @@
 // Use of this source code is governed under the Apache License, Version 2.0
 // that can be found in the LICENSE file.
 
-// Emulate independent GPIOs.
+// +build cgo
 
-package ftd2xx
+package d2xx
+
+/*
+#cgo LDFLAGS: -framework CoreFoundation -framework IOKit ${SRCDIR}/darwin_amd64/libftd2xx.a
+*/
+import "C"

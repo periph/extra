@@ -4,7 +4,7 @@
 
 // +build !windows
 
-package ftd2xx
+package d2xx
 
 /*
 #include "ftd2xx.h"

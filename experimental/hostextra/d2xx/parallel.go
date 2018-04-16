@@ -7,4 +7,4 @@
 // Interfacing parallel port:
 // http://www.ftdichip.com/Support/Documents/AppNotes/AN_167_FT1248_Parallel_Serial_Interface_Basics.pdf
 
-package ftd2xx
+package d2xx

@@ -3,10 +3,14 @@
 // that can be found in the LICENSE file.
 
 // +build cgo
+// +build !darwin,!amd64
+// +build !linux,!amd64
+// +build !linux,!arm
+// +build !windows
 
-package ftd2xx
+package d2xx
 
 /*
-#cgo LDFLAGS: -framework CoreFoundation -framework IOKit ${SRCDIR}/darwin_amd64/libftd2xx.a
+#cgo LDFLAGS: -lftd2xx
 */
 import "C"

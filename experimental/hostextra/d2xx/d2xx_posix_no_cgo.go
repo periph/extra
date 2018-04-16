@@ -5,7 +5,7 @@
 // +build !cgo
 // +build !windows
 
-package ftd2xx
+package d2xx
 
 // Library functions.
 

@@ -9,4 +9,4 @@
 // FTDI device input output pin states:
 // http://www.ftdichip.com/Support/Documents/AppNotes/AN_184%20FTDI%20Device%20Input%20Output%20Pin%20States.pdf
 
-package ftd2xx
+package d2xx

@@ -10,7 +10,7 @@
 // Implementation based on
 // http://www.ftdichip.com/Support/Documents/AppNotes/AN_180_FT232H%20MPSSE%20Example%20-%20USB%20Current%20Meter%20using%20the%20SPI%20interface.pdf
 
-package ftd2xx
+package d2xx
 
 /*
 // Page 12-13.

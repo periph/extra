@@ -4,7 +4,7 @@
 
 // +build cgo
 
-package ftd2xx
+package d2xx
 
 // TODO(maruel): https://github.com/golang/go/issues/7211 would help target the
 // optimal ARM architecture.

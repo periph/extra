@@ -4,7 +4,7 @@
 
 // +build cgo
 
-package ftd2xx
+package d2xx
 
 /*
 #cgo LDFLAGS: ${SRCDIR}/linux_amd64/libftd2xx.a

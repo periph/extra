@@ -2,15 +2,6 @@
 // Use of this source code is governed under the Apache License, Version 2.0
 // that can be found in the LICENSE file.
 
-// +build cgo
-// +build !darwin,!amd64
-// +build !linux,!amd64
-// +build !linux,!arm
-// +build !windows
+// Emulate independent GPIOs.
 
-package ftd2xx
-
-/*
-#cgo LDFLAGS: -lftd2xx
-*/
-import "C"
+package d2xx

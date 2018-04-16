@@ -2,7 +2,7 @@
 // Use of this source code is governed under the Apache License, Version 2.0
 // that can be found in the LICENSE file.
 
-package ftd2xx
+package d2xx
 
 import (
 	"sync"
@@ -17,7 +17,7 @@ import (
 // Some may not be opened; they may already be opened by another process or by
 // a driver included by the operating system.
 //
-// See https://github.com/periph/extra/tree/master/experimental/devices/ftd2xx.
+// See https://github.com/periph/extra/tree/master/experimental/hostextra/d2xx.
 func All() []Dev {
 	mu.Lock()
 	defer mu.Unlock()
@@ -59,7 +59,7 @@ type driver struct {
 }
 
 func (d *driver) String() string {
-	return "ftd2xx"
+	return "d2xx"
 }
 
 func (d *driver) Prerequisites() []string {

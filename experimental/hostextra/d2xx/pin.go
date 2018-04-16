@@ -4,7 +4,7 @@
 
 // Emulate independent GPIOs.
 
-package ftd2xx
+package d2xx
 
 import (
 	"errors"
@@ -44,7 +44,7 @@ func (p *invalidPin) Function() string {
 
 // In implements gpio.PinIn.
 func (p *invalidPin) In(pull gpio.Pull, e gpio.Edge) error {
-	return errors.New("ftd2xx: to be implemented")
+	return errors.New("d2xx: to be implemented")
 }
 
 // Read implements gpio.PinIn.
@@ -64,7 +64,7 @@ func (p *invalidPin) Pull() gpio.Pull {
 
 // Out implements gpio.PinOut.
 func (p *invalidPin) Out(l gpio.Level) error {
-	return errors.New("ftd2xx: to be implemented")
+	return errors.New("d2xx: to be implemented")
 }
 
 var _ gpio.PinIO = &invalidPin{}

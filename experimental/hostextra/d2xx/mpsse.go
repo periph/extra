@@ -10,7 +10,7 @@
 // MPSSE and MCU emulation modes:
 // http://www.ftdichip.com/Support/Documents/AppNotes/AN_108_Command_Processor_for_MPSSE_and_MCU_Host_Bus_Emulation_Modes.pdf
 
-package ftd2xx
+package d2xx
 
 import (
 	"errors"
@@ -216,12 +216,12 @@ func (d *device) setupMPSSE() error {
 // mpsseClock sets the clock at the closest value and returns it.
 func (d *device) mpsseClock() (time.Duration, error) {
 	// clockSetDivisor
-	return 0, errors.New("ftd2xx: Not implemented")
+	return 0, errors.New("d2xx: Not implemented")
 }
 
 func (d *device) mpsseTx(w, r []byte) error {
 	// One of dataXXX
-	return errors.New("ftd2xx: Not implemented")
+	return errors.New("d2xx: Not implemented")
 }
 
 func (d *device) mpsseCBus(mask, value byte) error {
@@ -287,7 +287,7 @@ func (g *gpiosMPSSE) init() {
 
 func (g *gpiosMPSSE) in(n int) error {
 	if g.h == nil {
-		return errors.New("ftd2xx: device not open")
+		return errors.New("d2xx: device not open")
 	}
 	g.direction = g.direction & ^(1 << uint(n))
 	if g.cbus {
@@ -298,7 +298,7 @@ func (g *gpiosMPSSE) in(n int) error {
 
 func (g *gpiosMPSSE) read() (byte, error) {
 	if g.h == nil {
-		return 0, errors.New("ftd2xx: device not open")
+		return 0, errors.New("d2xx: device not open")
 	}
 	var err error
 	if g.cbus {
@@ -311,7 +311,7 @@ func (g *gpiosMPSSE) read() (byte, error) {
 
 func (g *gpiosMPSSE) out(n int, l gpio.Level) error {
 	if g.h == nil {
-		return errors.New("ftd2xx: device not open")
+		return errors.New("d2xx: device not open")
 	}
 	g.direction = g.direction | (1 << uint(n))
 	if l {
@@ -367,12 +367,12 @@ func (g *gpioMPSSE) Function() string {
 func (g *gpioMPSSE) In(pull gpio.Pull, e gpio.Edge) error {
 	if e != gpio.NoEdge {
 		// We could support it on D5.
-		return errors.New("ftd2xx: edge triggering is not supported")
+		return errors.New("d2xx: edge triggering is not supported")
 	}
 	if pull != gpio.Float && pull != gpio.PullNoChange {
 		// In tristate, we can only pull up.
 		// EEPROM has a PullDownEnable flag.
-		return errors.New("ftd2xx: pull is not supported")
+		return errors.New("d2xx: pull is not supported")
 	}
 	return g.a.in(g.num)
 }
