@@ -23,47 +23,28 @@ import (
 const (
 	// TDI/TDO serial operation synchronised on clock edges.
 	//
-	// Combinations are:
-	// - MSB or LSB first
-	// - Long bitstreams or short ones
-	// - Ouput, Input or both
-	// - Data is sent on clock rising or falling edge
-	//
-	// Long streams:
+	// Long streams (default):
 	// - [1, 65536] bytes (length is sent minus one, requires 8 bits multiple)
+	//   <op>, <LengthLow-1>, <LengthHigh-1>, <byte0>, ..., <byteN>
 	//
-	// <op>, <LengthLow-1>, <LengthHigh-1>, <byte0>, ..., <byteN>
-	dataOutMSBFBytesRise  = 0x10
-	dataOutMSBFBytesFall  = 0x11
-	dataInMSBFBytesRise   = 0x20
-	dataInMSBFBytesFall   = 0x24
-	dataIOMSBFBytesRise   = 0x31
-	dataIOMSBFBytesFall   = 0x34
-	dataOutLSBFBytesRise  = 0x18
-	dataOutLSBFBytesFall  = 0x19
-	dataInLSBFBytesRise   = 0x28
-	dataInLSBFBytesFall   = 0x2C
-	dataIOLSBFBytesInRise = 0x39
-	dataIOLSBFBytesInFall = 0x3C
-	// Short streams:
+	// Short streams (dataBit is specified):
 	// - [1, 8] bits
+	//   <op>, <Length-1>, <byte>
 	//
-	// <op>, <Length-1>, <byte>
-	dataOutMSBFBitsRise  = 0x12
-	dataOutMSBFBitsFall  = 0x13
-	dataInMSBFBitsRise   = 0x22
-	dataInMSBFBitsFall   = 0x26
-	dataIOMSBFBitsRise   = 0x33
-	dataIOMSBFBitsFall   = 0x36
-	dataOutLSBFBitsRise  = 0x1A
-	dataOutLSBFBitsFall  = 0x1B
-	dataInLSBFBitsRise   = 0x2A
-	dataInLSBFBitsFall   = 0x2E
-	dataIOLSBFBitsInRise = 0x3B
-	dataIOLSBFBitsInFall = 0x3E
+	// When both dataOut and dataIn are specified, one of dataOutFall or
+	// dataInFall should be specified, at least for most sane protocols.
+	//
+	// Flags:
+	dataOut     byte = 0x10 // Enable output, default on +VE (Rise)
+	dataIn      byte = 0x20 // Enable input, default on +VE (Rise)
+	dataOutFall byte = 0x01 // instead of Rise
+	dataInFall  byte = 0x04 // instead of Rise
+	dataLSBF    byte = 0x08 // instead of MSBF
+	dataBit     byte = 0x02 // instead of Byte
+
 	// Data line drives low when the data is 0 and tristates high on data 1. This
 	// is used with I²C.
-	dataTristate = 0x9E
+	dataTristate byte = 0x9E
 
 	// TSM operation (for JTAG).
 	//
@@ -72,10 +53,10 @@ const (
 	//   static for the duration of TMS clocking.
 	//
 	// <op>, <Length>, <byte>
-	tmsOutLSBFRise = 0x4A
-	tmsOutLSBFFall = 0x4B
-	tmsIOLSBInRise = 0x6A
-	tmsIOLSBInFall = 0x6B
+	tmsOutLSBFRise byte = 0x4A
+	tmsOutLSBFFall byte = 0x4B
+	tmsIOLSBInRise byte = 0x6A
+	tmsIOLSBInFall byte = 0x6B
 	// Unclear: 0x6E and 0x6F
 
 	// GPIO operation.
@@ -84,16 +65,16 @@ const (
 	// - Direction 1 means output, 0 means input.
 	//
 	// <op>, <value>, <direction>
-	gpioSetD  = 0x80
-	gpioSetC  = 0x82
-	gpioReadD = 0x81
-	gpioReadC = 0x83
+	gpioSetD  byte = 0x80
+	gpioSetC  byte = 0x82
+	gpioReadD byte = 0x81
+	gpioReadC byte = 0x83
 
 	// Internal loopback.
 	//
 	// Connects TDI and TDO together.
-	internalLoopbackEnable  = 0x84
-	internalLoopbackDisable = 0x85
+	internalLoopbackEnable  byte = 0x84
+	internalLoopbackDisable byte = 0x85
 
 	// Clock.
 	//
@@ -104,8 +85,8 @@ const (
 	//
 	// By default, the base clock is 6MHz via a 5x divisor. On
 	// FT232H/FT2232H/FT4232H, the 5x divisor can be disabled.
-	clock30MHz = 0x8A
-	clock6MHz  = 0x8B
+	clock30MHz byte = 0x8A
+	clock6MHz  byte = 0x8B
 	// Sets clock divisor.
 	//
 	// The effective value depends if clock30MHz was sent or not.
@@ -119,53 +100,53 @@ const (
 	// - 0xFFFF(65536) 91.553Hz / 457.763Hz
 	//
 	// <op>, <valueL-1>, <valueH-1>
-	clockSetDivisor = 0x86
+	clockSetDivisor byte = 0x86
 	// Uses 3 phases data clocking: data is valid on both clock edges. Needed
 	// for I²C.
-	clock3Phase = 0x8C
+	clock3Phase byte = 0x8C
 	// Uses normal 2 phases data clocking.
-	clock2Phase = 0x8D
+	clock2Phase byte = 0x8D
 	// Enables clock even while not doing any operation. Used with JTAG.
 	// Enables the clock between [1, 8] pulses.
 	// <op>, <length-1>
-	clockOnShort = 0x8E
+	clockOnShort byte = 0x8E
 	// Enables the clock between [8, 524288] pulses in 8 multiples.
 	// <op>, <lengthL-1>, <lengthH-1>
-	clockOnLong = 0x8F
+	clockOnLong byte = 0x8F
 	// Enables clock until D5 is high or low. Used with JTAG.
-	clockUntilHigh = 0x94
-	clockUntilLow  = 0x95
+	clockUntilHigh byte = 0x94
+	clockUntilLow  byte = 0x95
 	// <op>, <lengthL-1>, <lengthH-1> in 8 multiples.
-	clockUntilHighLong = 0x9C
-	clockUntilLowLong  = 0x9D
+	clockUntilHighLong byte = 0x9C
+	clockUntilLowLong  byte = 0x9D
 	// Enables adaptive clocking. Used with JTAG.
 	//
 	// This causes the controller to wait for D7 signal state as an ACK.
-	clockAdaptive = 0x96
+	clockAdaptive byte = 0x96
 	// Disables adaptive clocking.
-	clockNormal = 0x97
+	clockNormal byte = 0x97
 
 	// CPU mode.
 	//
 	// Access the device registers like a memory mapped device.
 	//
 	// <op>, <addrLow>
-	cpuReadShort = 0x90
+	cpuReadShort byte = 0x90
 	// <op>, <addrHi>, <addrLow>
-	cpuReadFar = 0x91
+	cpuReadFar byte = 0x91
 	// <op>, <addrLow>, <data>
-	cpuWriteShort = 0x92
+	cpuWriteShort byte = 0x92
 	// <op>, <addrHi>, <addrLow>, <data>
-	cpuWriteFar = 0x91
+	cpuWriteFar byte = 0x91
 
 	// Buffer operations.
 	//
 	// Flush the buffer back to the host.
-	flush = 0x87
+	flush byte = 0x87
 	// Wait until D5 (JTAG) or I/O1 (CPU) is high. Once it is detected as
 	// high, the MPSSE engine moves on to process the next instruction.
-	waitHigh = 0x88
-	waitLow  = 0x89
+	waitHigh byte = 0x88
+	waitLow  byte = 0x89
 )
 
 // setupMPSSE sets the device into MPSSE mode.
@@ -199,7 +180,6 @@ func (d *device) setupMPSSE() error {
 		}
 	}
 
-	// Other I²C stuff skipped.
 	_, err := d.write([]byte{clock30MHz, clockNormal, clock2Phase, internalLoopbackDisable})
 	if err == nil {
 		d.isMPSSE = true
@@ -213,15 +193,122 @@ func (d *device) setupMPSSE() error {
 
 //
 
-// mpsseClock sets the clock at the closest value and returns it.
-func (d *device) mpsseClock() (time.Duration, error) {
-	// clockSetDivisor
-	return 0, errors.New("d2xx: Not implemented")
+// mpsseRegRead reads the memory mapped registers from the device.
+func (d *device) mpsseRegRead(addr uint16) (byte, error) {
+	// Unlike most other operations, the uint16 byte order is <hi>, <lo>.
+	if _, err := d.write([]byte{cpuReadFar, byte(addr >> 8), byte(addr)}); err != nil {
+		return 0, err
+	}
+	var b [1]byte
+	_, err := d.read(b[:])
+	return b[0], err
 }
 
-func (d *device) mpsseTx(w, r []byte) error {
-	// One of dataXXX
-	return errors.New("d2xx: Not implemented")
+// mpsseClock sets the clock at the closest value and returns it.
+func (d *device) mpsseClock(hz int) (int, error) {
+	clk := clock30MHz
+	base := 30000000
+	div := base / hz
+	if div >= 65536 {
+		clk = clock6MHz
+		base /= 5
+		div = base / hz
+		if div >= 65536 {
+			return 0, errors.New("d2xx: clock frequency is too low")
+		}
+	}
+	_, err := d.write([]byte{clk, clockSetDivisor, byte(div - 1), byte((div - 1) >> 8)})
+	return base / div, err
+}
+
+// mpsseTx runs a transaction on the clock on pins D0, D1 and D2.
+//
+// It can only do it on a multiple of 8 bits.
+func (d *device) mpsseTx(w, r []byte, ew, er gpio.Edge, lsbf bool) error {
+	op := byte(0)
+	if lsbf {
+		op |= dataLSBF
+	}
+	l := len(w)
+	if len(w) != 0 {
+		if len(w) > 65536 {
+			return errors.New("d2xx: write buffer too long; max 65536")
+		}
+		op |= dataOut
+		if ew == gpio.FallingEdge {
+			op |= dataOutFall
+		}
+	}
+	if len(r) != 0 {
+		if len(r) > 65536 {
+			return errors.New("d2xx: read buffer too long; max 65536")
+		}
+		op |= dataIn
+		if er == gpio.FallingEdge {
+			op |= dataInFall
+		}
+		if l != 0 && len(r) != l {
+			return errors.New("d2xx: mismatched buffer lengths")
+		}
+		l = len(r)
+	}
+	// The FT232H has 1Kb Tx and Rx buffers. So partial writes should be done.
+
+	// flushBuffer can be useful if rbits != 0.
+	cmd := []byte{op, byte(l - 1), byte((l - 1) >> 8)}
+	if _, err := d.write(append(cmd, w...)); err != nil {
+		return err
+	}
+	if len(r) != 0 {
+		_, err := d.read(r)
+		return err
+	}
+	return nil
+}
+
+// mpsseTxShort runs a transaction on the clock pins D0, D1 and D2 for a byte
+// or less: between 1 and 8 bits.
+func (d *device) mpsseTxShort(w byte, wbits, rbits int, ew, er gpio.Edge, lsbf bool) (byte, error) {
+	op := byte(dataBit)
+	if lsbf {
+		op |= dataLSBF
+	}
+	l := wbits
+	if wbits != 0 {
+		if wbits > 8 {
+			return 0, errors.New("d2xx: write buffer too long; max 8")
+		}
+		op |= dataOut
+		if ew == gpio.FallingEdge {
+			op |= dataOutFall
+		}
+	}
+	if rbits != 0 {
+		if rbits > 8 {
+			return 0, errors.New("d2xx: read buffer too long; max 8")
+		}
+		op |= dataIn
+		if er == gpio.FallingEdge {
+			op |= dataInFall
+		}
+		if l != 0 && rbits != l {
+			return 0, errors.New("d2xx: mismatched buffer lengths")
+		}
+		l = rbits
+	}
+	cmd := []byte{op, byte(l - 1)}
+	if wbits != 0 {
+		cmd = append(cmd, w)
+	}
+	if _, err := d.write(cmd); err != nil {
+		return 0, err
+	}
+	if rbits != 0 {
+		var b [1]byte
+		_, err := d.read(b[:])
+		return b[0], err
+	}
+	return 0, nil
 }
 
 func (d *device) mpsseCBus(mask, value byte) error {

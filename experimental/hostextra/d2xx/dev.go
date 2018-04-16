@@ -10,6 +10,8 @@ import (
 
 	"periph.io/x/periph/conn"
 	"periph.io/x/periph/conn/gpio"
+	"periph.io/x/periph/conn/i2c"
+	"periph.io/x/periph/conn/spi"
 )
 
 // VenID is the vendor ID for official FTDI devices.
@@ -98,7 +100,11 @@ type Dev interface {
 	conn.Resource
 	GetInfo(i *Info)
 	Header() []gpio.PinIO
+	I2C() (i2c.BusCloser, error)
+	SPI() (spi.PortCloser, error)
 }
+
+// TODO(maruel): JTAG, Parallel, UART.
 
 // generic represents a generic FTDI device.
 //
@@ -110,7 +116,7 @@ type generic struct {
 }
 
 func (f *generic) String() string {
-	return "ftdi(" + strconv.Itoa(f.index) + ")"
+	return f.typeName() + "(" + strconv.Itoa(f.index) + ")"
 }
 
 // Halt implements conn.Resource.
@@ -128,6 +134,23 @@ func (f *generic) GetInfo(i *Info) {
 // Header returns the GPIO pins exposed on the chip.
 func (f *generic) Header() []gpio.PinIO {
 	return nil
+}
+
+// I2C returns an I²C bus if possible.
+func (f *generic) I2C() (i2c.BusCloser, error) {
+	return nil, errors.New("d2xx: I²C not supported on " + f.typeName())
+}
+
+// SPI returns an SPI bus if possible.
+func (f *generic) SPI() (spi.PortCloser, error) {
+	return nil, errors.New("d2xx: SPI not supported on " + f.typeName())
+}
+
+func (f *generic) typeName() string {
+	if f.info.Type != "" {
+		return f.info.Type
+	}
+	return "ftdi_unknown"
 }
 
 //
@@ -191,6 +214,10 @@ func newFT232H(g generic) *FT232H {
 //
 // Pins C8 and C9 can only be used in 'slow' mode via EEPROM and are currently
 // not implemented.
+//
+// Datasheet
+//
+// http://www.ftdichip.com/Support/Documents/DataSheets/ICs/DS_FT232H.pdf
 type FT232H struct {
 	generic
 
@@ -213,8 +240,10 @@ type FT232H struct {
 	C8 gpio.PinIO // Not implemented
 	C9 gpio.PinIO // Not implemented
 
-	cbus gpiosMPSSE
-	dbus gpiosMPSSE
+	cbus    gpiosMPSSE
+	dbus    gpiosMPSSE
+	i2cBus  i2c.BusCloser
+	spiPort spi.PortCloser
 
 	hdr [18]gpio.PinIO
 }
@@ -268,6 +297,19 @@ func (f *FT232H) DBusRead() (byte, error) {
 	return f.h.mpsseDBusRead()
 }
 
+// I2C returns an I²C bus if possible.
+func (f *FT232H) I2C() (i2c.BusCloser, error) {
+	// Set clock 3 phases.
+	// Set clock freq.
+	return nil, errors.New("d2xx: not implemented yet")
+}
+
+// SPI returns an SPI bus if possible.
+func (f *FT232H) SPI() (spi.PortCloser, error) {
+	// Set clock freq.
+	return nil, errors.New("d2xx: not implemented yet")
+}
+
 //
 
 func newFT232R(g generic) *FT232R {
@@ -318,6 +360,10 @@ func newFT232R(g generic) *FT232R {
 // CTS.
 //
 // SparkFun's version exports all pins *except* (inexplicably) the CBus ones.
+//
+// Datasheet
+//
+// http://www.ftdichip.com/Support/Documents/DataSheets/ICs/DS_FT232R.pdf
 type FT232R struct {
 	generic
 

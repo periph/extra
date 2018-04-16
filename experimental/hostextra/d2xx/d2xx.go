@@ -180,6 +180,19 @@ func (d *device) getBitMode() (byte, error) {
 	return l, nil
 }
 
+// setBitMode change the mode of operation of the device.
+//
+// mask sets which pins are inputs and outputs.
+//
+// mode can be:
+//  0x00 Reset
+//  0x01 Asynchronous bit bang
+//  0x02 MPSSE (ft232h, ft2232, ft2232h, ft4232h)
+//  0x04 Synchronous bit bang (ft232h, ft232r, ft245r, ft2232, ft2232h, ft4232h)
+//  0x08 MCU host bus emulation mode (ft232h, ft2232, ft2232h, ft4232h)
+//  0x10 Fast opto-isolated serial mode (ft232h, ft2232, ft2232h, ft4232h)
+//  0x20 CBus bit bang mode (ft232h and ft232r)
+//  0x40 Single channel synchrnous 245 fifo mode (ft232h and ft2232h)
 func (d *device) setBitMode(mask, mode byte) error {
 	return toErr("SetBitMode", d.d2xxSetBitMode(mask, mode))
 }
