@@ -3,63 +3,28 @@
 Go driver wrapper for the [Future Technology "D2XX" driver](
 http://www.ftdichip.com/Drivers/D2XX.htm).
 
+## Installation
 
-## Windows
+### Debian
 
-Install the **setup executable** from http://www.ftdichip.com/Drivers/D2XX.htm
-and install it as an administrator.
+This includes Raspbian and Ubuntu.
 
-`cgo` is not needed!
-
-
-## OSX
-
-On OSX, there is no need to install anything as the following driver is
-included, but the OS provided driver gets in the way and must be disabled.
-
-- darwin_amd64/libftd2xx.a v1.4.4
-
-The package is designed to build even if `cgo` is not available but will fail at
-runtime.
+- Configure cgo as explained at
+  [extra/README.md](https://github.com/periph/extra/tree/master/README.md#debian).
 
 
-### Temporary
+#### Temporary
 
-```
-sudo kextunload -b com.apple.driver.AppleUSBFTDI
-```
-
-
-### Permanently
-
-Figure out, likely run the command above upon all boot?
-
-
-## Debian
-
-On Debian based distros (Raspbian/Ubuntu), there is no need to install anything
-as the following drivers are included but the OS provided driver gets in the way
-and must be disabled.
-
-- linux_arm/libftd2xx.a v1.4.6 with ARMv6 hard float (RPi compatible)
-- linux_amd64/libftd2xx.a v1.4.6
-
-The package is designed to build even if `cgo` is not available but will fail at
-runtime.
-
-
-### Temporary
-
-Run this command after connecting your FTDI device:
+Run this command **after** connecting your FTDI device:
 
 ```
 sudo modprobe -r ftdi_so usbserial
 ```
 
 
-### Permanent
+#### Permanent
 
-Reconnect your device after running the following command:
+Reconnect your device **after** running the following command:
 
 ```
 cd $GOPATH/src/periph.io/x/extra/hostextra/d2xx
@@ -69,11 +34,38 @@ sudo udevadm trigger --verbose
 ```
 
 
+### macOS
+
+- Configure cgo as explained at
+  [extra/README.md](https://github.com/periph/extra/tree/master/README.md#macos).
+
+
+#### Temporary
+
+```
+sudo kextunload -b com.apple.driver.AppleUSBFTDI
+```
+
+
+#### Permanently
+
+TODO.
+
+
+### Windows
+
+- Once you connect the device, Windows Update should install the FTDI D2XX
+  driver automatically. Wait for it to occur.
+- If this fails, install the driver from
+  http://www.ftdichip.com/Drivers/D2XX.htm
 
 ## Included driver license
 
 - ftd2xx.h is v2.12.28
 - WinTypes.h is v1.4.6
+- darwin_amd64/libftd2xx.a v1.4.4
+- linux_arm/libftd2xx.a v1.4.6 with ARMv6 hard float (RPi compatible)
+- linux_amd64/libftd2xx.a v1.4.6
 
 > This software is provided by Future Technology Devices International Limited
 > ``as is'' and any express or implied warranties, including, but not limited

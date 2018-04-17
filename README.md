@@ -21,6 +21,34 @@ go get -u -v periph.io/x/extra/cmd/...
 ```
 
 
+### Debian
+
+This includes Raspbian and Ubuntu.
+
+You need to install pkg-config to enable cgo, run:
+
+    sudo apt install pkg-config
+
+### macOS
+
+- Install [Homebrew](https://brew.sh)
+- Follow instructions, it may ask to run `xcode-select -install`
+- Install pkg-config with: `brew install pkg-config`
+
+Optional: install without root with the following steps:
+
+    mkdir -p ~/homebrew
+    curl -sL https://github.com/Homebrew/brew/tarball/1.5.13 | tar xz --strip 1 -C ~/homebrew
+    export PATH="$PATH:$HOME/homebrew/bin"
+    echo 'export PATH="$PATH:$HOME/homebrew/bin"' >> ~/.bash_profile
+    brew upgrade
+
+
+### Windows
+
+TODO. One way is to install mingw-w64.
+
+
 ## Authors
 
 `periph` was initiated with ❤️️ and passion by [Marc-Antoine
