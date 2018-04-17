@@ -18,7 +18,7 @@
 // Permanent: Reconnect your device after running the following command:
 //
 //  cd $GOPATH/src/periph.io/x/extra/hostextra/d2xx
-//  sudo cp debian/d98-ft232h.rules /etc/udev/rules.d/
+//  sudo cp debian/98-ft232h.rules /etc/udev/rules.d/
 //  sudo udevadm control --reload-rules
 //  sudo udevadm trigger --verbose
 //
