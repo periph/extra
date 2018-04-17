@@ -47,29 +47,40 @@ func numDevices() (int, error) {
 //
 
 func openDev(i int) (*device, error) {
+	// TODO(maruel): The handle is leaked in failure paths.
 	h, e := d2xxOpen(i)
 	if e != 0 {
-		return h, toErr("Open failed", e)
+		return h, toErr("Open", e)
 	}
 	// Under the hood, it calls both FT_GetDeviceInfo and FT_EEPROM_READ.
-	// Ignore the error code, when it fails, the device will be marked as "not
-	// opened".
-	_ = h.getInfo()
+	if e := h.getInfo(); e != 0 {
+		return nil, toErr("Open", e)
+	}
 
 	// Sets up USB parameters.
-	_ = h.setup()
-	_ = h.flushPending()
+	if e := h.setup(); e != 0 {
+		return nil, toErr("Open", e)
+	}
+	if err := h.flushPending(); err != nil {
+		return nil, err
+	}
 
 	// Reset mode to setting in EEPROM.
 	// TODO(maruel): Eventually we may want to read the state and expose it
 	// instead, to not cause unwanted glitches.
-	_ = h.setBitMode(0, 0)
+	if err := h.setBitMode(0, 0); err != nil {
+		return nil, nil
+	}
 	switch h.t {
 	case ft232H, ft2232H, ft4232H: // ft2232
-		_ = h.setupMPSSE()
+		if err := h.setupMPSSE(); err != nil {
+			return nil, err
+		}
 	case ft232R:
-		// CBus bitbang
-		_ = h.setBitMode(0, 0x20)
+		// Asynchronous bitbang
+		if err := h.setBitMode(0, 1); err != nil {
+			return nil, err
+		}
 	default:
 	}
 	return h, nil
@@ -459,9 +470,9 @@ func toErr(s string, e int) error {
 	case 1: // FT_INVALID_HANDLE
 		msg = "invalid handle"
 	case 2: // FT_DEVICE_NOT_FOUND
-		msg = "device not found"
+		msg = "device not found; see https://github.com/periph/extra/tree/master/hostextra/d2xx for help"
 	case 3: // FT_DEVICE_NOT_OPENED
-		msg = "device busy; see https://github.com/periph/extra/tree/master/hostextra/d2xx for help"
+		msg = "device busy"
 	case 4: // FT_IO_ERROR
 		msg = "I/O error"
 	case 5: // FT_INSUFFICIENT_RESOURCES

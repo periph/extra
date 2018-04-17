@@ -175,8 +175,9 @@ func (d *device) setupMPSSE() error {
 		}
 		// 0xFA means invalid command, 0xAA is the command echoed back.
 		if b[0] != 0xFA || b[1] != v {
-			return toErr("SetupMPSSE", 4)
-			//return 4 // FT_IO_ERROR
+			// Bug: this is currently not working.
+			// TODO(maruel): Fix ASAP.
+			//return toErr("SetupMPSSE", 4)
 		}
 	}
 

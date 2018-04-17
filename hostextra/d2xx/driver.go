@@ -13,11 +13,6 @@ import (
 )
 
 // All enumerates all the connected FTDI devices.
-//
-// Some may not be opened; they may already be opened by another process or by
-// a driver included by the operating system.
-//
-// See https://github.com/periph/extra/tree/master/hostextra/d2xx.
 func All() []Dev {
 	mu.Lock()
 	defer mu.Unlock()
@@ -82,9 +77,10 @@ func (d *driver) Init() (bool, error) {
 			}
 			pinreg.Register(d.String(), p)
 		} else {
-			// Create a shallow generic handle.
+			// Create a shallow broken handle, so the user can learn how to fix the
+			// problem.
 			err = err1
-			all = append(all, &generic{index: i})
+			all = append(all, &broken{index: i, err: err})
 		}
 	}
 	return true, err

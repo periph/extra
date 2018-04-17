@@ -106,6 +106,39 @@ type Dev interface {
 
 // TODO(maruel): JTAG, Parallel, UART.
 
+// broken represents a device that couldn't be opened correctly.
+//
+// It returns an error message to help the user diagnose issues.
+type broken struct {
+	index int
+	err   error
+}
+
+func (b *broken) String() string {
+	return "broken#" + strconv.Itoa(b.index) + ": " + b.err.Error()
+}
+
+func (b *broken) Halt() error {
+	return nil
+}
+
+func (b *broken) GetInfo(i *Info) {
+	i.Opened = false
+	i.Type = b.err.Error()
+}
+
+func (b *broken) Header() []gpio.PinIO {
+	return nil
+}
+
+func (b *broken) I2C() (i2c.BusCloser, error) {
+	return nil, b.err
+}
+
+func (b *broken) SPI() (spi.PortCloser, error) {
+	return nil, b.err
+}
+
 // generic represents a generic FTDI device.
 //
 // It is used for the models that this package doesn't fully support yet.
