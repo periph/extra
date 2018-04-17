@@ -17,7 +17,7 @@
 //
 // Permanent: Reconnect your device after running the following command:
 //
-//  cd $GOPATH/src/periph.io/x/extra/experimental/hostextra/d2xx
+//  cd $GOPATH/src/periph.io/x/extra/hostextra/d2xx
 //  sudo cp debian/d98-ft232h.rules /etc/udev/rules.d/
 //  sudo udevadm control --reload-rules
 //  sudo udevadm trigger --verbose
@@ -54,6 +54,6 @@
 // Troubleshooting
 //
 // See sources in
-// https://github.com/periph/extra/tree/master/experimental/hostextra/d2xx
+// https://github.com/periph/extra/tree/master/hostextra/d2xx
 // for more developer links.
 package d2xx

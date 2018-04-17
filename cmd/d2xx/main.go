@@ -13,7 +13,7 @@ import (
 	"log"
 	"os"
 
-	"periph.io/x/extra/experimental/hostextra/d2xx"
+	"periph.io/x/extra/hostextra/d2xx"
 	"periph.io/x/periph/host"
 )
 

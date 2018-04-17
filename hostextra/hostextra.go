@@ -4,13 +4,20 @@
 
 package hostextra
 
-import "periph.io/x/periph"
+import (
+	_ "periph.io/x/extra/hostextra/d2xx"
+	"periph.io/x/periph"
+	"periph.io/x/periph/host"
+)
 
-// Init calls periph.Init() and returns it as-is.
+// Init calls host.Init(), which calls periph.Init() and returns it as-is.
 //
 // The difference with host.Init() and periph.Init() is that hostextra.Init()
 // includes more drivers, the drivers that either depend on third party
 // packages or on cgo.
+//
+// Since host.Init() is used, all drivers in periph.io/x/periph/host are also
+// automatically loaded.
 func Init() (*periph.State, error) {
-	return periph.Init()
+	return host.Init()
 }

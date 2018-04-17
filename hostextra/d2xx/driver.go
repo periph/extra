@@ -17,7 +17,7 @@ import (
 // Some may not be opened; they may already be opened by another process or by
 // a driver included by the operating system.
 //
-// See https://github.com/periph/extra/tree/master/experimental/hostextra/d2xx.
+// See https://github.com/periph/extra/tree/master/hostextra/d2xx.
 func All() []Dev {
 	mu.Lock()
 	defer mu.Unlock()

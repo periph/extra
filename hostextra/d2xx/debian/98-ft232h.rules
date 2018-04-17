@@ -6,7 +6,7 @@
 # the ftdi_sio driver.
 #
 # See
-# https://github.com/periph/extra/tree/master/experimental/hostextra/d2xx
+# https://github.com/periph/extra/tree/master/hostextra/d2xx
 # for more information.
 
 # Make FTDI device usable from users in group plugdev.
