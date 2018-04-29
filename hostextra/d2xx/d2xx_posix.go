@@ -32,37 +32,33 @@ func d2xxCreateDeviceInfoList() (int, int) {
 
 // Device functions.
 
-func d2xxOpen(i int) (*device, int) {
+func d2xxOpen(i int) (handle, int) {
 	var h C.FT_HANDLE
 	e := C.FT_Open(C.int(i), &h)
 	if uintptr(h) == 0 && e == 0 {
 		panic("unexpected")
 	}
-	return &device{h: handle(h)}, int(e)
+	return handle(h), int(e)
 }
 
-func (d *device) d2xxClose() int {
-	e := C.FT_Close(d.toH())
-	return int(e)
+func (h handle) d2xxClose() int {
+	return int(C.FT_Close(h.toH()))
 }
 
-func (d *device) d2xxResetDevice() int {
-	e := C.FT_ResetDevice(d.toH())
-	return int(e)
+func (h handle) d2xxResetDevice() int {
+	return int(C.FT_ResetDevice(h.toH()))
 }
 
-func (d *device) getInfo() int {
+func (h handle) d2xxGetDeviceInfo() (devType, uint16, uint16, int) {
 	var dev C.FT_DEVICE
 	var id C.DWORD
-	// TODO(maruel): When specifying serial or desc, the function fails. It's not
-	// really important because we read the EEPROM instead.
-	if e := C.FT_GetDeviceInfo(d.toH(), &dev, &id, nil, nil, nil); e != 0 {
-		return int(e)
+	if e := C.FT_GetDeviceInfo(h.toH(), &dev, &id, nil, nil, nil); e != 0 {
+		return unknown, 0, 0, int(e)
 	}
-	d.t = devType(dev)
-	d.venID = uint16(id >> 16)
-	d.productID = uint16(id)
+	return devType(dev), uint16(id >> 16), uint16(id), 0
+}
 
+func (h handle) d2xxEEPROMRead(d *device) int {
 	var manufacturer [64]C.char
 	var manufacturerID [64]C.char
 	var desc [64]C.char
@@ -77,11 +73,11 @@ func (d *device) getInfo() int {
 	// ft232r, it MUST be set. Since we can't know in advance what we must use,
 	// just try both. ¯\_(ツ)_/¯
 	hdr.deviceType = d.t
-	if e := C.FT_EEPROM_Read(d.toH(), eepromVoid, C.DWORD(len(d.eeprom)), &manufacturer[0], &manufacturerID[0], &desc[0], &serial[0]); e != 0 {
+	if e := C.FT_EEPROM_Read(h.toH(), eepromVoid, C.DWORD(len(d.eeprom)), &manufacturer[0], &manufacturerID[0], &desc[0], &serial[0]); e != 0 {
 		// FT_INVALID_PARAMETER
 		if e == 6 {
 			hdr.deviceType = 0
-			e = C.FT_EEPROM_Read(d.toH(), eepromVoid, C.DWORD(len(d.eeprom)), &manufacturer[0], &manufacturerID[0], &desc[0], &serial[0])
+			e = C.FT_EEPROM_Read(h.toH(), eepromVoid, C.DWORD(len(d.eeprom)), &manufacturer[0], &manufacturerID[0], &desc[0], &serial[0])
 		}
 		if e != 0 {
 			return int(e)
@@ -95,50 +91,54 @@ func (d *device) getInfo() int {
 	return 0
 }
 
-func (d *device) setup() int {
-	// Disable event/error characters.
-	if e := C.FT_SetChars(d.toH(), 0, 0, 0, 0); e != 0 {
-		return int(e)
+func (h handle) d2xxSetChars(eventChar byte, eventEn bool, errorChar byte, errorEn bool) int {
+	v := C.UCHAR(0)
+	if eventEn {
+		v = 1
 	}
-	// Set I/O timeouts to 5 sec.
-	if e := C.FT_SetTimeouts(d.toH(), 5000, 5000); e != 0 {
-		return int(e)
+	w := C.UCHAR(0)
+	if errorEn {
+		w = 1
 	}
-	// Latency timer at default 16ms.
-	return int(C.FT_SetLatencyTimer(d.toH(), 16))
+	return int(C.FT_SetChars(h.toH(), C.UCHAR(eventChar), v, C.UCHAR(errorChar), w))
 }
 
-func (d *device) d2xxGetQueueStatus() (uint32, int) {
+func (h handle) d2xxSetTimeouts(readMS, writeMS int) int {
+	return int(C.FT_SetTimeouts(h.toH(), C.DWORD(readMS), C.DWORD(writeMS)))
+}
+
+func (h handle) d2xxSetLatencyTimer(delayMS uint8) int {
+	return int(C.FT_SetLatencyTimer(h.toH(), C.UCHAR(delayMS)))
+}
+
+func (h handle) d2xxGetQueueStatus() (uint32, int) {
 	var v C.DWORD
-	e := C.FT_GetQueueStatus(d.toH(), &v)
+	e := C.FT_GetQueueStatus(h.toH(), &v)
 	return uint32(v), int(e)
 }
 
-func (d *device) d2xxRead(b []byte) (int, int) {
+func (h handle) d2xxRead(b []byte) (int, int) {
 	var bytesRead C.DWORD
-	e := C.FT_Read(d.toH(), C.LPVOID(unsafe.Pointer(&b[0])), C.DWORD(len(b)), &bytesRead)
+	e := C.FT_Read(h.toH(), C.LPVOID(unsafe.Pointer(&b[0])), C.DWORD(len(b)), &bytesRead)
 	return int(bytesRead), int(e)
 }
 
-func (d *device) d2xxWrite(b []byte) (int, int) {
+func (h handle) d2xxWrite(b []byte) (int, int) {
 	var bytesSent C.DWORD
-	e := C.FT_Write(d.toH(), C.LPVOID(unsafe.Pointer(&b[0])), C.DWORD(len(b)), &bytesSent)
+	e := C.FT_Write(h.toH(), C.LPVOID(unsafe.Pointer(&b[0])), C.DWORD(len(b)), &bytesSent)
 	return int(bytesSent), int(e)
 }
 
-func (d *device) d2xxGetBitMode() (byte, int) {
+func (h handle) d2xxGetBitMode() (byte, int) {
 	var s C.UCHAR
-	e := C.FT_GetBitMode(d.toH(), &s)
+	e := C.FT_GetBitMode(h.toH(), &s)
 	return uint8(s), int(e)
 }
 
-func (d *device) d2xxSetBitMode(mask, mode byte) int {
-	return int(C.FT_SetBitMode(d.toH(), C.UCHAR(mask), C.UCHAR(mode)))
+func (h handle) d2xxSetBitMode(mask, mode byte) int {
+	return int(C.FT_SetBitMode(h.toH(), C.UCHAR(mask), C.UCHAR(mode)))
 }
 
-func (d *device) toH() C.FT_HANDLE {
-	return C.FT_HANDLE(d.h)
+func (h handle) toH() C.FT_HANDLE {
+	return C.FT_HANDLE(h)
 }
-
-// handle is a d2xx handle.
-type handle C.FT_HANDLE

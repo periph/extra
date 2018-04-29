@@ -21,44 +21,54 @@ func d2xxCreateDeviceInfoList() (int, int) {
 
 // Device functions.
 
-func d2xxOpen(i int) (*device, int) {
-	return nil, noCGO
-}
-
-func (d *device) d2xxClose() int {
-	return noCGO
-}
-
-func (d *device) d2xxResetDevice() int {
-	return noCGO
-}
-
-func (d *device) getInfo() int {
-	return noCGO
-}
-
-func (d *device) setup() int {
-	return noCGO
-}
-
-func (d *device) d2xxGetQueueStatus() (uint32, int) {
+func d2xxOpen(i int) (handle, int) {
 	return 0, noCGO
 }
 
-func (d *device) d2xxRead(b []byte) (int, int) {
-	return 0, noCGO
-}
-
-func (d *device) d2xxWrite(b []byte) (int, int) {
-	return 0, noCGO
-}
-
-func (d *device) d2xxGetBitMode() (byte, int) {
-	return 0, noCGO
-}
-
-func (d *device) d2xxSetBitMode(mask, mode byte) int {
+func (h handle) d2xxClose() int {
 	return noCGO
 }
 
-type handle uintptr
+func (h handle) d2xxResetDevice() int {
+	return noCGO
+}
+
+func (h handle) d2xxGetDeviceInfo() (devType, uint16, uint16, int) {
+	return unknown, 0, 0, noCGO
+}
+
+func (h handle) d2xxEEPROMRead(d *device) int {
+	return noCGO
+}
+
+func (h handle) d2xxSetChars(eventChar byte, eventEn bool, errorChar byte, errorEn bool) int {
+	return noCGO
+}
+
+func (h handle) d2xxSetTimeouts(readMS, writeMS int) int {
+	return noCGO
+}
+
+func (h handle) d2xxSetLatencyTimer(delayMS uint8) int {
+	return noCGO
+}
+
+func (h handle) d2xxGetQueueStatus() (uint32, int) {
+	return 0, noCGO
+}
+
+func (h handle) d2xxRead(b []byte) (int, int) {
+	return 0, noCGO
+}
+
+func (h handle) d2xxWrite(b []byte) (int, int) {
+	return 0, noCGO
+}
+
+func (h handle) d2xxGetBitMode() (byte, int) {
+	return 0, noCGO
+}
+
+func (h handle) d2xxSetBitMode(mask, mode byte) int {
+	return noCGO
+}

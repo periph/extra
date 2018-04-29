@@ -10,7 +10,7 @@ import (
 	"unsafe"
 )
 
-const disabled = false
+var disabled = true
 
 // Library functions.
 
@@ -23,9 +23,6 @@ func d2xxGetLibraryVersion() (uint8, uint8, uint8) {
 }
 
 func d2xxCreateDeviceInfoList() (int, int) {
-	if pCreateDeviceInfoList == nil {
-		return 0, missing
-	}
 	var num uint32
 	r1, _, _ := pCreateDeviceInfoList.Call(uintptr(unsafe.Pointer(&num)))
 	return int(num), int(r1)
@@ -33,42 +30,32 @@ func d2xxCreateDeviceInfoList() (int, int) {
 
 // Device functions.
 
-func d2xxOpen(i int) (*device, int) {
+func d2xxOpen(i int) (handle, int) {
 	var h handle
-	if pOpen == nil {
-		return nil, missing
-	}
 	r1, _, _ := pOpen.Call(uintptr(i), uintptr(unsafe.Pointer(&h)))
-	return &device{h: h}, int(r1)
+	return h, int(r1)
 }
 
-func (d *device) d2xxClose() int {
-	if pClose == nil {
-		return missing
-	}
-	r1, _, _ := pClose.Call(d.toH())
+func (h handle) d2xxClose() int {
+	r1, _, _ := pClose.Call(h.toH())
 	return int(r1)
 }
 
-func (d *device) d2xxResetDevice() int {
-	if pResetDevice == nil {
-		return missing
-	}
-	r1, _, _ := pResetDevice.Call(d.toH())
+func (h handle) d2xxResetDevice() int {
+	r1, _, _ := pResetDevice.Call(h.toH())
 	return int(r1)
 }
 
-func (d *device) getInfo() int {
-	if pGetDeviceInfo == nil || pEEPROMRead == nil {
-		return missing
-	}
+func (h handle) d2xxGetDeviceInfo() (devType, uint16, uint16, int) {
+	var d devType
 	var id uint32
-	if r1, _, _ := pGetDeviceInfo.Call(d.toH(), uintptr(unsafe.Pointer(&d.t)), uintptr(unsafe.Pointer(&id)), 0, 0, 0); r1 != 0 {
-		return int(r1)
+	if r1, _, _ := pGetDeviceInfo.Call(h.toH(), uintptr(unsafe.Pointer(&d)), uintptr(unsafe.Pointer(&id)), 0, 0, 0); r1 != 0 {
+		return unknown, 0, 0, int(r1)
 	}
-	d.venID = uint16(id >> 16)
-	d.productID = uint16(id)
+	return devType(d), uint16(id >> 16), uint16(id), 0
+}
 
+func (h handle) d2xxEEPROMRead(d *device) int {
 	var manufacturer [64]byte
 	var manufacturerID [64]byte
 	var desc [64]byte
@@ -84,7 +71,7 @@ func (d *device) getInfo() int {
 	hdr := (*eepromHeader)(eepromVoid)
 	// It MUST be set here. This is not always the case on posix.
 	hdr.deviceType = d.t
-	if r1, _, _ := pEEPROMRead.Call(d.toH(), uintptr(eepromVoid), uintptr(len(d.eeprom)), m, mi, de, s); r1 != 0 {
+	if r1, _, _ := pEEPROMRead.Call(h.toH(), uintptr(eepromVoid), uintptr(len(d.eeprom)), m, mi, de, s); r1 != 0 {
 		return int(r1)
 	}
 
@@ -95,73 +82,61 @@ func (d *device) getInfo() int {
 	return 0
 }
 
-func (d *device) setup() int {
-	if pSetChars == nil || pSetTimeouts == nil || pSetLatencyTimer == nil {
-		return missing
+func (h handle) d2xxSetChars(eventChar byte, eventEn bool, errorChar byte, errorEn bool) int {
+	v := uintptr(0)
+	if eventEn {
+		v = 1
 	}
-	// Disable event/error characters.
-	if r1, _, _ := pSetChars.Call(d.toH(), 0, 0, 0, 0); r1 != 0 {
-		return int(r1)
+	w := uintptr(0)
+	if errorEn {
+		w = 1
 	}
-	// Set I/O timeouts to 5 sec.
-	if r1, _, _ := pSetTimeouts.Call(d.toH(), 5000, 5000); r1 != 0 {
-		return int(r1)
-	}
-	// Latency timer at default 16ms.
-	r1, _, _ := pSetLatencyTimer.Call(d.toH(), 16)
+	r1, _, _ := pSetChars.Call(h.toH(), uintptr(eventChar), v, uintptr(errorChar), w)
 	return int(r1)
 }
 
-func (d *device) d2xxGetQueueStatus() (uint32, int) {
-	if pGetQueueStatus == nil {
-		return 0, missing
-	}
+func (h handle) d2xxSetTimeouts(readMS, writeMS int) int {
+	r1, _, _ := pSetTimeouts.Call(h.toH(), uintptr(readMS), uintptr(writeMS))
+	return int(r1)
+}
+
+func (h handle) d2xxSetLatencyTimer(delayMS uint8) int {
+	r1, _, _ := pSetLatencyTimer.Call(h.toH(), uintptr(delayMS))
+	return int(r1)
+}
+
+func (h handle) d2xxGetQueueStatus() (uint32, int) {
 	var v uint32
-	r1, _, _ := pGetQueueStatus.Call(d.toH(), uintptr(unsafe.Pointer(&v)))
+	r1, _, _ := pGetQueueStatus.Call(h.toH(), uintptr(unsafe.Pointer(&v)))
 	return v, int(r1)
 }
 
-func (d *device) d2xxRead(b []byte) (int, int) {
-	if pRead == nil {
-		return 0, missing
-	}
+func (h handle) d2xxRead(b []byte) (int, int) {
 	var bytesRead uint32
-	r1, _, _ := pRead.Call(d.toH(), uintptr(unsafe.Pointer(&b[0])), uintptr(len(b)), uintptr(unsafe.Pointer(&bytesRead)))
+	r1, _, _ := pRead.Call(h.toH(), uintptr(unsafe.Pointer(&b[0])), uintptr(len(b)), uintptr(unsafe.Pointer(&bytesRead)))
 	return 0, int(r1)
 }
 
-func (d *device) d2xxWrite(b []byte) (int, int) {
-	if pWrite == nil {
-		return 0, missing
-	}
+func (h handle) d2xxWrite(b []byte) (int, int) {
 	var bytesSent uint32
-	r1, _, _ := pWrite.Call(d.toH(), uintptr(unsafe.Pointer(&b[0])), uintptr(len(b)), uintptr(unsafe.Pointer(&bytesSent)))
+	r1, _, _ := pWrite.Call(h.toH(), uintptr(unsafe.Pointer(&b[0])), uintptr(len(b)), uintptr(unsafe.Pointer(&bytesSent)))
 	return 0, int(r1)
 }
 
-func (d *device) d2xxGetBitMode() (byte, int) {
-	if pGetBitMode == nil {
-		return 0, missing
-	}
+func (h handle) d2xxGetBitMode() (byte, int) {
 	var s uint8
-	r1, _, _ := pGetBitMode.Call(d.toH(), uintptr(unsafe.Pointer(&s)))
+	r1, _, _ := pGetBitMode.Call(h.toH(), uintptr(unsafe.Pointer(&s)))
 	return s, int(r1)
 }
 
-func (d *device) d2xxSetBitMode(mask, mode byte) int {
-	if pSetBitMode == nil {
-		return missing
-	}
-	r1, _, _ := pSetBitMode.Call(d.toH(), uintptr(mask), uintptr(mode))
+func (h handle) d2xxSetBitMode(mask, mode byte) int {
+	r1, _, _ := pSetBitMode.Call(h.toH(), uintptr(mask), uintptr(mode))
 	return int(r1)
 }
 
-func (d *device) toH() uintptr {
-	return uintptr(d.h)
+func (h handle) toH() uintptr {
+	return uintptr(h)
 }
-
-// handle is a d2xx handle.
-type handle uintptr
 
 //
 
@@ -185,21 +160,30 @@ var (
 
 func init() {
 	if dll, _ := syscall.LoadDLL("ftd2xx.dll"); dll != nil {
-		pClose, _ = dll.FindProc("FT_Close")
-		pCreateDeviceInfoList, _ = dll.FindProc("FT_CreateDeviceInfoList")
-		pEEPROMRead, _ = dll.FindProc("FT_EEPROM_Read")
-		pGetBitMode, _ = dll.FindProc("FT_GetBitMode")
-		pGetDeviceInfo, _ = dll.FindProc("FT_GetDeviceInfo")
-		pGetLibraryVersion, _ = dll.FindProc("FT_GetLibraryVersion")
-		pGetQueueStatus, _ = dll.FindProc("FT_GetQueueStatus")
-		pOpen, _ = dll.FindProc("FT_Open")
-		pRead, _ = dll.FindProc("FT_Read")
-		pResetDevice, _ = dll.FindProc("FT_ResetDevice")
-		pSetBitMode, _ = dll.FindProc("FT_SetBitMode")
-		pSetChars, _ = dll.FindProc("FT_SetChars")
-		pSetLatencyTimer, _ = dll.FindProc("FT_SetLatencyTimer")
-		pSetTimeouts, _ = dll.FindProc("FT_SetTimeouts")
-		pWrite, _ = dll.FindProc("FT_Write")
+		// If any function is not found, disable the support.
+		disabled = false
+		find := func(n string) *syscall.Proc {
+			s, _ := dll.FindProc(n)
+			if s == nil {
+				disabled = true
+			}
+			return s
+		}
+		pClose = find("FT_Close")
+		pCreateDeviceInfoList = find("FT_CreateDeviceInfoList")
+		pEEPROMRead = find("FT_EEPROM_Read")
+		pGetBitMode = find("FT_GetBitMode")
+		pGetDeviceInfo = find("FT_GetDeviceInfo")
+		pGetLibraryVersion = find("FT_GetLibraryVersion")
+		pGetQueueStatus = find("FT_GetQueueStatus")
+		pOpen = find("FT_Open")
+		pRead = find("FT_Read")
+		pResetDevice = find("FT_ResetDevice")
+		pSetBitMode = find("FT_SetBitMode")
+		pSetChars = find("FT_SetChars")
+		pSetLatencyTimer = find("FT_SetLatencyTimer")
+		pSetTimeouts = find("FT_SetTimeouts")
+		pWrite = find("FT_Write")
 	}
 }
 

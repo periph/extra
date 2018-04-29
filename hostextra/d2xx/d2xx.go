@@ -49,41 +49,46 @@ func numDevices() (int, error) {
 func openDev(i int) (*device, error) {
 	// TODO(maruel): The handle is leaked in failure paths.
 	h, e := d2xxOpen(i)
+	d := &device{h: h}
 	if e != 0 {
-		return h, toErr("Open", e)
+		return d, toErr("Open", e)
 	}
+	if d.t, d.venID, d.devID, e = h.d2xxGetDeviceInfo(); e != 0 {
+		return d, toErr("GetDeviceInfo", e)
+	}
+
 	// Under the hood, it calls both FT_GetDeviceInfo and FT_EEPROM_READ.
-	if e := h.getInfo(); e != 0 {
-		return nil, toErr("Open/getInfo", e)
+	if e := h.d2xxEEPROMRead(d); e != 0 {
+		return nil, toErr("EEPROMRead", e)
 	}
 
 	// Sets up USB parameters.
-	if e := h.setup(); e != 0 {
-		return nil, toErr("Open/setup", e)
+	if err := d.setup(); err != nil {
+		return nil, err
 	}
-	if err := h.flushPending(); err != nil {
+	if err := d.flushPending(); err != nil {
 		return nil, err
 	}
 
 	// Reset mode to setting in EEPROM.
 	// TODO(maruel): Eventually we may want to read the state and expose it
 	// instead, to not cause unwanted glitches.
-	if err := h.setBitMode(0, 0); err != nil {
+	if err := d.setBitMode(0, 0); err != nil {
 		return nil, nil
 	}
-	switch h.t {
+	switch d.t {
 	case ft232H, ft2232H, ft4232H: // ft2232
-		if err := h.setupMPSSE(); err != nil {
+		if err := d.setupMPSSE(); err != nil {
 			return nil, err
 		}
 	case ft232R:
 		// Asynchronous bitbang
-		if err := h.setBitMode(0, 1); err != nil {
+		if err := d.setBitMode(0, 1); err != nil {
 			return nil, err
 		}
 	default:
 	}
-	return h, nil
+	return d, nil
 }
 
 // device is the low level d2xx device handle.
@@ -91,7 +96,7 @@ type device struct {
 	h              handle
 	t              devType
 	venID          uint16
-	productID      uint16
+	devID          uint16
 	manufacturer   string
 	manufacturerID string
 	desc           string
@@ -102,13 +107,13 @@ type device struct {
 
 func (d *device) closeDev() error {
 	// Not yet called.
-	return toErr("Close", d.d2xxClose())
+	return toErr("Close", d.h.d2xxClose())
 }
 
 func (d *device) getI(i *Info) {
 	i.Type = d.t.String()
 	i.VenID = d.venID
-	i.ProductID = d.productID
+	i.DevID = d.devID
 	i.Manufacturer = d.manufacturer
 	i.ManufacturerID = d.manufacturerID
 	i.Desc = d.desc
@@ -179,12 +184,25 @@ func (d *device) getI(i *Info) {
 	}
 }
 
+func (d *device) setup() error {
+	// Disable event/error characters.
+	if e := d.h.d2xxSetChars(0, false, 0, false); e != 0 {
+		return toErr("SetChars", e)
+	}
+	// Set I/O timeouts to 5 sec.
+	if e := d.h.d2xxSetTimeouts(5000, 5000); e != 0 {
+		return toErr("SetTimeouts", e)
+	}
+	// Latency timer at default 16ms.
+	return toErr("SetLatencyTimer", d.h.d2xxSetLatencyTimer(16))
+}
+
 func (d *device) reset() error {
-	return toErr("Reset", d.d2xxResetDevice())
+	return toErr("Reset", d.h.d2xxResetDevice())
 }
 
 func (d *device) getBitMode() (byte, error) {
-	l, e := d.d2xxGetBitMode()
+	l, e := d.h.d2xxGetBitMode()
 	if e != 0 {
 		return 0, toErr("GetBitMode", e)
 	}
@@ -205,20 +223,20 @@ func (d *device) getBitMode() (byte, error) {
 //  0x20 CBus bit bang mode (ft232h and ft232r)
 //  0x40 Single channel synchrnous 245 fifo mode (ft232h and ft2232h)
 func (d *device) setBitMode(mask, mode byte) error {
-	return toErr("SetBitMode", d.d2xxSetBitMode(mask, mode))
+	return toErr("SetBitMode", d.h.d2xxSetBitMode(mask, mode))
 }
 
 func (d *device) flushPending() error {
-	p, e := d.d2xxGetQueueStatus()
+	p, e := d.h.d2xxGetQueueStatus()
 	if p == 0 || e != 0 {
 		return toErr("FlushPending", e)
 	}
-	_, e = d.d2xxRead(make([]byte, p))
+	_, e = d.h.d2xxRead(make([]byte, p))
 	return toErr("FlushPending", e)
 }
 
 func (d *device) read(b []byte) (int, error) {
-	p, e := d.d2xxGetQueueStatus()
+	p, e := d.h.d2xxGetQueueStatus()
 	if p == 0 || e != 0 {
 		return int(p), toErr("Read", e)
 	}
@@ -226,13 +244,13 @@ func (d *device) read(b []byte) (int, error) {
 	if v > len(b) {
 		v = len(b)
 	}
-	n, e := d.d2xxRead(b[:v])
+	n, e := d.h.d2xxRead(b[:v])
 	return n, toErr("Read", e)
 }
 
 func (d *device) write(b []byte) (int, error) {
 	// Use a stronger guarantee that all bytes have been written.
-	n, e := d.d2xxWrite(b)
+	n, e := d.h.d2xxWrite(b)
 	return n, toErr("Write", e)
 }
 
@@ -510,3 +528,25 @@ func toErr(s string, e int) error {
 	}
 	return errors.New("d2xx: " + s + ": " + msg)
 }
+
+// Common functions that must be implemented in addition to
+// d2xxGetLibraryVersion(), d2xxCreateDeviceInfoList() and d2xxOpen().
+type d2xxHandle interface {
+	d2xxClose() int
+	d2xxResetDevice() int
+	d2xxGetDeviceInfo() (devType, uint16, uint16, int)
+	d2xxEEPROMRead(d *device) int
+	d2xxSetChars(eventChar byte, eventEn bool, errorChar byte, errorEn bool) int
+	d2xxSetTimeouts(readMS, writeMS int) int
+	d2xxSetLatencyTimer(delayMS uint8) int
+	d2xxGetQueueStatus() (uint32, int)
+	d2xxRead(b []byte) (int, int)
+	d2xxWrite(b []byte) (int, int)
+	d2xxGetBitMode() (byte, int)
+	d2xxSetBitMode(mask, mode byte) int
+}
+
+// handle is a d2xx handle.
+type handle uintptr
+
+var _ d2xxHandle = handle(0)

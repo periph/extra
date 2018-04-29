@@ -28,8 +28,8 @@ type Info struct {
 	// It has the form "ft232h". An empty string means the type is unknown.
 	Type string
 	// USB descriptor information.
-	VenID     uint16
-	ProductID uint16
+	VenID uint16
+	DevID uint16
 
 	// The remainder is part of EEPROM.
 

@@ -22,7 +22,7 @@ func process(d d2xx.Dev) {
 	d.GetInfo(&i)
 	fmt.Printf("  Type:           %s\n", i.Type)
 	fmt.Printf("  Vendor ID:      %#04x\n", i.VenID)
-	fmt.Printf("  Product ID:     %#04x\n", i.ProductID)
+	fmt.Printf("  Device ID:      %#04x\n", i.DevID)
 	fmt.Printf("  Manufacturer:   %s\n", i.Manufacturer)
 	fmt.Printf("  ManufacturerID: %s\n", i.ManufacturerID)
 	fmt.Printf("  Desc:           %s\n", i.Desc)
