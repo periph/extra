@@ -14,6 +14,8 @@ import (
 	"unsafe"
 )
 
+const disabled = false
+
 // Library functions.
 
 func d2xxGetLibraryVersion() (uint8, uint8, uint8) {

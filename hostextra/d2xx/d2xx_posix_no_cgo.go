@@ -7,6 +7,8 @@
 
 package d2xx
 
+const disabled = true
+
 // Library functions.
 
 func d2xxGetLibraryVersion() (uint8, uint8, uint8) {

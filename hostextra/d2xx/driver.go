@@ -87,7 +87,9 @@ func (d *driver) Init() (bool, error) {
 }
 
 func init() {
-	periph.MustRegister(&driver{})
+	if !disabled {
+		periph.MustRegister(&driver{})
+	}
 }
 
 var _ periph.Driver = &driver{}
