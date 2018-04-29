@@ -75,7 +75,9 @@ func (d *driver) Init() (bool, error) {
 			for i := range hdr {
 				p[i] = []pin.Pin{hdr[i]}
 			}
-			pinreg.Register(d.String(), p)
+			if err := pinreg.Register(d.String(), p); err != nil {
+				return true, err
+			}
 		} else {
 			// Create a shallow broken handle, so the user can learn how to fix the
 			// problem.

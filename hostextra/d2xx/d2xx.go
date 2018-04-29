@@ -54,12 +54,12 @@ func openDev(i int) (*device, error) {
 	}
 	// Under the hood, it calls both FT_GetDeviceInfo and FT_EEPROM_READ.
 	if e := h.getInfo(); e != 0 {
-		return nil, toErr("Open", e)
+		return nil, toErr("Open/getInfo", e)
 	}
 
 	// Sets up USB parameters.
 	if e := h.setup(); e != 0 {
-		return nil, toErr("Open", e)
+		return nil, toErr("Open/setup", e)
 	}
 	if err := h.flushPending(); err != nil {
 		return nil, err
@@ -472,7 +472,7 @@ func toErr(s string, e int) error {
 	case 2: // FT_DEVICE_NOT_FOUND
 		msg = "device not found; see https://github.com/periph/extra/tree/master/hostextra/d2xx for help"
 	case 3: // FT_DEVICE_NOT_OPENED
-		msg = "device busy"
+		msg = "device busy; see https://github.com/periph/extra/tree/master/hostextra/d2xx for help"
 	case 4: // FT_IO_ERROR
 		msg = "I/O error"
 	case 5: // FT_INSUFFICIENT_RESOURCES

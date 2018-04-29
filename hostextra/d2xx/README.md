@@ -18,7 +18,7 @@ This includes Raspbian and Ubuntu.
 Run this command **after** connecting your FTDI device:
 
 ```
-sudo modprobe -r ftdi_so usbserial
+sudo rmmod ftdi_sio usbserial
 ```
 
 
