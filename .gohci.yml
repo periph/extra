@@ -1,0 +1,51 @@
+# See https://github.com/periph/gohci
+version: 1
+workers:
+- name: mbp
+  checks:
+  - cmd:
+    - go
+    - test
+    - ./...
+  - cmd:
+    - ./hostextra/d2xx/test.sh
+  - cmd:
+    - go
+    - install
+    - ./cmd/...
+  - cmd:
+    - d2xx
+- name: raspberrypi-2f34
+  checks:
+  - cmd:
+    - go
+    - test
+    - ./...
+  - cmd:
+    - go
+    - install
+    - ./cmd/...
+  - cmd:
+    - d2xx
+- name: win10
+  checks:
+  - cmd:
+    - go
+    - test
+    - -race
+    - ./...
+  - cmd:
+    - go
+    - vet
+    - ./...
+  - cmd:
+    - go
+    - install
+    - ./cmd/...
+  - cmd:
+    - d2xx
+- checks:
+  - cmd:
+    - go
+    - test
+    - ./...
