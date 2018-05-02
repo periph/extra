@@ -210,11 +210,11 @@ func (d *device) setupMPSSE() error {
 // mpsseRegRead reads the memory mapped registers from the device.
 func (d *device) mpsseRegRead(addr uint16) (byte, error) {
 	// Unlike most other operations, the uint16 byte order is <hi>, <lo>.
-	if _, err := d.write([]byte{cpuReadFar, byte(addr >> 8), byte(addr)}); err != nil {
+	b := [...]byte{cpuReadFar, byte(addr >> 8), byte(addr)}
+	if _, err := d.write(b[:]); err != nil {
 		return 0, err
 	}
-	var b [1]byte
-	_, err := d.read(b[:])
+	_, err := d.read(b[:1])
 	return b[0], err
 }
 
@@ -231,7 +231,8 @@ func (d *device) mpsseClock(hz int) (int, error) {
 			return 0, errors.New("d2xx: clock frequency is too low")
 		}
 	}
-	_, err := d.write([]byte{clk, clockSetDivisor, byte(div - 1), byte((div - 1) >> 8)})
+	b := [...]byte{clk, clockSetDivisor, byte(div - 1), byte((div - 1) >> 8)}
+	_, err := d.write(b[:])
 	return base / div, err
 }
 
@@ -311,7 +312,8 @@ func (d *device) mpsseTxShort(w byte, wbits, rbits int, ew, er gpio.Edge, lsbf b
 		}
 		l = rbits
 	}
-	cmd := []byte{op, byte(l - 1)}
+	b := [3]byte{op, byte(l - 1)}
+	cmd := b[:2]
 	if wbits != 0 {
 		cmd = append(cmd, w)
 	}
@@ -319,40 +321,41 @@ func (d *device) mpsseTxShort(w byte, wbits, rbits int, ew, er gpio.Edge, lsbf b
 		return 0, err
 	}
 	if rbits != 0 {
-		var b [1]byte
-		_, err := d.read(b[:])
+		_, err := d.read(b[:1])
 		return b[0], err
 	}
 	return 0, nil
 }
 
 func (d *device) mpsseCBus(mask, value byte) error {
-	_, err := d.write([]byte{gpioSetC, mask, value})
+	b := [...]byte{gpioSetC, mask, value}
+	_, err := d.write(b[:])
 	return err
 }
 
 func (d *device) mpsseDBus(mask, value byte) error {
-	_, err := d.write([]byte{gpioSetD, mask, value})
+	b := [...]byte{gpioSetD, mask, value}
+	_, err := d.write(b[:])
 	return err
 }
 
 func (d *device) mpsseCBusRead() (byte, error) {
-	if _, err := d.write([]byte{gpioReadC}); err != nil {
+	b := [...]byte{gpioReadC}
+	if _, err := d.write(b[:]); err != nil {
 		return 0, err
 	}
-	var b [1]byte
-	if _, err := d.read(b[:]); err != nil {
+	if _, err := d.read(b[:1]); err != nil {
 		return 0, err
 	}
 	return b[0], nil
 }
 
 func (d *device) mpsseDBusRead() (byte, error) {
-	if _, err := d.write([]byte{gpioReadD}); err != nil {
+	b := [...]byte{gpioReadD}
+	if _, err := d.write(b[:]); err != nil {
 		return 0, err
 	}
-	var b [1]byte
-	if _, err := d.read(b[:]); err != nil {
+	if _, err := d.read(b[:1]); err != nil {
 		return 0, err
 	}
 	return b[0], nil

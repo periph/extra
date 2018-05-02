@@ -15,6 +15,17 @@ workers:
     - ./cmd/...
   - cmd:
     - d2xx
+  - cmd:
+    - go
+    - install
+    - -tags
+    - periphextra
+    - periph.io/x/periph/cmd/headers-list
+    - periph.io/x/periph/cmd/gpio-list
+  - cmd:
+    - headers-list
+  - cmd:
+    - gpio-list
 - name: raspberrypi-2f34
   checks:
   - cmd:
@@ -44,8 +55,14 @@ workers:
     - ./cmd/...
   - cmd:
     - d2xx
-- checks:
   - cmd:
     - go
-    - test
-    - ./...
+    - install
+    - -tags
+    - periphextra
+    - periph.io/x/periph/cmd/headers-list
+    - periph.io/x/periph/cmd/gpio-list
+  - cmd:
+    - headers-list
+  - cmd:
+    - gpio-list
