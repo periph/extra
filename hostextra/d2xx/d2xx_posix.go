@@ -103,6 +103,14 @@ func (h handle) d2xxSetChars(eventChar byte, eventEn bool, errorChar byte, error
 	return int(C.FT_SetChars(h.toH(), C.UCHAR(eventChar), v, C.UCHAR(errorChar), w))
 }
 
+func (h handle) d2xxSetUSBParameters(in, out int) int {
+	return int(C.FT_SetUSBParameters(h.toH(), C.DWORD(in), C.DWORD(out)))
+}
+
+func (h handle) d2xxSetFlowControl() int {
+	return int(C.FT_SetFlowControl(h.toH(), C.FT_FLOW_RTS_CTS, 0, 0))
+}
+
 func (h handle) d2xxSetTimeouts(readMS, writeMS int) int {
 	return int(C.FT_SetTimeouts(h.toH(), C.DWORD(readMS), C.DWORD(writeMS)))
 }

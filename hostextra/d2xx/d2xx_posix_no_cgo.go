@@ -45,6 +45,14 @@ func (h handle) d2xxSetChars(eventChar byte, eventEn bool, errorChar byte, error
 	return noCGO
 }
 
+func (h handle) d2xxSetUSBParameters(in, out int) int {
+	return noCGO
+}
+
+func (h handle) d2xxSetFlowControl() int {
+	return noCGO
+}
+
 func (h handle) d2xxSetTimeouts(readMS, writeMS int) int {
 	return noCGO
 }

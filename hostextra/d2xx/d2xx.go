@@ -197,8 +197,14 @@ func (d *device) setup() error {
 	return toErr("SetLatencyTimer", d.h.d2xxSetLatencyTimer(16))
 }
 
+// reset resets the device.
 func (d *device) reset() error {
-	return toErr("Reset", d.h.d2xxResetDevice())
+	if e := d.h.d2xxResetDevice(); e != 0 {
+		return toErr("Reset", e)
+	}
+	// USB/driver: Flush any pending read buffer that had been sent by device
+	// before it reset.
+	return d.flushPending()
 }
 
 func (d *device) getBitMode() (byte, error) {
@@ -226,19 +232,20 @@ func (d *device) setBitMode(mask, mode byte) error {
 	return toErr("SetBitMode", d.h.d2xxSetBitMode(mask, mode))
 }
 
+// flushPending flushes any data left in the read buffer.
 func (d *device) flushPending() error {
 	p, e := d.h.d2xxGetQueueStatus()
 	if p == 0 || e != 0 {
-		return toErr("FlushPending", e)
+		return toErr("FlushPending/GetQueueStatus", e)
 	}
 	_, e = d.h.d2xxRead(make([]byte, p))
-	return toErr("FlushPending", e)
+	return toErr("FlushPending/Read", e)
 }
 
 func (d *device) read(b []byte) (int, error) {
 	p, e := d.h.d2xxGetQueueStatus()
 	if p == 0 || e != 0 {
-		return int(p), toErr("Read", e)
+		return int(p), toErr("Read/GetQueueStatus", e)
 	}
 	v := int(p)
 	if v > len(b) {
@@ -537,6 +544,8 @@ type d2xxHandle interface {
 	d2xxGetDeviceInfo() (devType, uint16, uint16, int)
 	d2xxEEPROMRead(d *device) int
 	d2xxSetChars(eventChar byte, eventEn bool, errorChar byte, errorEn bool) int
+	d2xxSetUSBParameters(in, out int) int
+	d2xxSetFlowControl() int
 	d2xxSetTimeouts(readMS, writeMS int) int
 	d2xxSetLatencyTimer(delayMS uint8) int
 	d2xxGetQueueStatus() (uint32, int)

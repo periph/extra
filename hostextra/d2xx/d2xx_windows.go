@@ -95,6 +95,17 @@ func (h handle) d2xxSetChars(eventChar byte, eventEn bool, errorChar byte, error
 	return int(r1)
 }
 
+func (h handle) d2xxSetUSBParameters(in, out int) int {
+	r1, _, _ := pSetUSBParameters.Call(h.toH(), uintptr(in), uintptr(out))
+	return int(r1)
+}
+
+func (h handle) d2xxSetFlowControl() int {
+	// FT_FLOW_RTS_CTS
+	r1, _, _ := pSetFlowControl.Call(h.toH(), 0x0100, 0, 0)
+	return int(r1)
+}
+
 func (h handle) d2xxSetTimeouts(readMS, writeMS int) int {
 	r1, _, _ := pSetTimeouts.Call(h.toH(), uintptr(readMS), uintptr(writeMS))
 	return int(r1)
@@ -153,8 +164,10 @@ var (
 	pResetDevice          *syscall.Proc
 	pSetBitMode           *syscall.Proc
 	pSetChars             *syscall.Proc
+	pSetFlowControl       *syscall.Proc
 	pSetLatencyTimer      *syscall.Proc
 	pSetTimeouts          *syscall.Proc
+	pSetUSBParameters     *syscall.Proc
 	pWrite                *syscall.Proc
 )
 
@@ -181,8 +194,10 @@ func init() {
 		pResetDevice = find("FT_ResetDevice")
 		pSetBitMode = find("FT_SetBitMode")
 		pSetChars = find("FT_SetChars")
+		pSetFlowControl = find("FT_SetFlowControl")
 		pSetLatencyTimer = find("FT_SetLatencyTimer")
 		pSetTimeouts = find("FT_SetTimeouts")
+		pSetUSBParameters = find("FT_SetUSBParameters")
 		pWrite = find("FT_Write")
 	}
 }
