@@ -62,19 +62,8 @@ func openDev(i int) (*device, error) {
 		return nil, toErr("EEPROMRead", e)
 	}
 
-	// Sets up USB parameters.
-	if err := d.setup(); err != nil {
+	if err := d.setupCommon(); err != nil {
 		return nil, err
-	}
-	if err := d.flushPending(); err != nil {
-		return nil, err
-	}
-
-	// Reset mode to setting in EEPROM.
-	// TODO(maruel): Eventually we may want to read the state and expose it
-	// instead, to not cause unwanted glitches.
-	if err := d.setBitMode(0, 0); err != nil {
-		return nil, nil
 	}
 	switch d.t {
 	case ft232H, ft2232H, ft4232H: // ft2232
@@ -184,17 +173,43 @@ func (d *device) getI(i *Info) {
 	}
 }
 
-func (d *device) setup() error {
-	// Disable event/error characters.
+// setupCommon is the general setup for common devices.
+//
+// It configures the device itself, the D2XX communication
+// parameters and the USB parameters. The API doesn't make a clear distinction
+// between all 3.
+func (d *device) setupCommon() error {
+	// Device: reset the device completely so it becomes in a known state.
+	if err := d.reset(); err != nil {
+		return err
+	}
+	// Driver: maximum packet size. Note that this clears any data in the buffer,
+	// so it is good to do it immediately after a reset. The 'out' parameter is
+	// ignored.
+	if e := d.h.d2xxSetUSBParameters(65536, 0); e != 0 {
+		return toErr("SetUSBParameters", e)
+	}
+	// Not sure: Disable event/error characters.
 	if e := d.h.d2xxSetChars(0, false, 0, false); e != 0 {
 		return toErr("SetChars", e)
 	}
-	// Set I/O timeouts to 5 sec.
+	// Driver: Set I/O timeouts to 5 sec.
 	if e := d.h.d2xxSetTimeouts(5000, 5000); e != 0 {
 		return toErr("SetTimeouts", e)
 	}
-	// Latency timer at default 16ms.
-	return toErr("SetLatencyTimer", d.h.d2xxSetLatencyTimer(16))
+	// Device: Latency timer at 1ms.
+	if e := d.h.d2xxSetLatencyTimer(1); e != 0 {
+		return toErr("SetLatencyTimer", e)
+	}
+	// Not sure: Turn on flow control to synchronize IN requests.
+	if e := d.h.d2xxSetFlowControl(); e != 0 {
+		return toErr("SetFlowControl", e)
+	}
+	// Device: Reset mode to setting in EEPROM.
+	if err := d.setBitMode(0, 0); err != nil {
+		return nil
+	}
+	return nil
 }
 
 // reset resets the device.

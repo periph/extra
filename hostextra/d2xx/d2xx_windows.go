@@ -125,13 +125,13 @@ func (h handle) d2xxGetQueueStatus() (uint32, int) {
 func (h handle) d2xxRead(b []byte) (int, int) {
 	var bytesRead uint32
 	r1, _, _ := pRead.Call(h.toH(), uintptr(unsafe.Pointer(&b[0])), uintptr(len(b)), uintptr(unsafe.Pointer(&bytesRead)))
-	return 0, int(r1)
+	return int(bytesRead), int(r1)
 }
 
 func (h handle) d2xxWrite(b []byte) (int, int) {
 	var bytesSent uint32
 	r1, _, _ := pWrite.Call(h.toH(), uintptr(unsafe.Pointer(&b[0])), uintptr(len(b)), uintptr(unsafe.Pointer(&bytesSent)))
-	return 0, int(r1)
+	return int(bytesSent), int(r1)
 }
 
 func (h handle) d2xxGetBitMode() (byte, int) {

@@ -14,6 +14,7 @@ package d2xx
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -156,8 +157,6 @@ func (d *device) setupMPSSE() error {
 	// http://www.ftdichip.com/Support/Documents/AppNotes/AN_255_USB%20to%20I2C%20Example%20using%20the%20FT232H%20and%20FT201X%20devices.pdf
 	// Pre-state:
 	// - Write EEPROM i.IsFifo = true so the device DBus is started in tristate.
-	// FT_SetUSBParameters(ftHandle, 65536, 0)
-	// FT_SetFlowControl
 
 	// Enable the MPSSE controller.
 	if err := d.setBitMode(0, 2); err != nil {
@@ -169,27 +168,41 @@ func (d *device) setupMPSSE() error {
 		if _, err := d.write([]byte{v}); err != nil {
 			return err
 		}
+		// Try for 200ms.
 		var b [2]byte
-		if _, err := d.read(b[:]); err != nil {
-			return err
+		success := false
+		for start := time.Now(); time.Since(start) < 200*time.Millisecond; {
+			if n, err := d.read(b[:]); err != nil {
+				return err
+			} else if n == 0 {
+				// Slow down the busy loop a little.
+				time.Sleep(100 * time.Microsecond)
+				continue
+			}
+			// 0xFA means invalid command, 0xAA is the command echoed back.
+			if b[0] != 0xFA || b[1] != v {
+				return toErr("SetupMPSSE", 4)
+			}
+			success = true
+			break
 		}
-		// 0xFA means invalid command, 0xAA is the command echoed back.
-		if b[0] != 0xFA || b[1] != v {
-			// Bug: this is currently not working.
-			// TODO(maruel): Fix ASAP.
-			//return toErr("SetupMPSSE", 4)
+		if !success {
+			return fmt.Errorf("d2xx: I/O failure while trying to setup MPSSE: %v", b[:])
 		}
 	}
 
-	_, err := d.write([]byte{clock30MHz, clockNormal, clock2Phase, internalLoopbackDisable})
-	if err == nil {
-		d.isMPSSE = true
+	// Initialize MPSSE to a known state.
+	cmd := []byte{
+		clock30MHz, clockNormal, clock2Phase, internalLoopbackDisable,
+		gpioSetC, 0xFF, 0x00,
+		gpioSetD, 0xFF, 0x00,
 	}
-	if err != nil {
+	if _, err := d.write(cmd); err != nil {
 		return err
 	}
-	d.write([]byte{0x80, 0xC9, 0xFB})
-	return err
+	// Success!!
+	d.isMPSSE = true
+	return nil
 }
 
 //
@@ -254,6 +267,7 @@ func (d *device) mpsseTx(w, r []byte, ew, er gpio.Edge, lsbf bool) error {
 		l = len(r)
 	}
 	// The FT232H has 1Kb Tx and Rx buffers. So partial writes should be done.
+	// TODO(maruel): Test.
 
 	// flushBuffer can be useful if rbits != 0.
 	cmd := []byte{op, byte(l - 1), byte((l - 1) >> 8)}
