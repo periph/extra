@@ -58,8 +58,8 @@ sudo kextunload -b com.apple.driver.AppleUSBFTDI
 This permanently disable Apple's FTDI driver.
 
 - Visit http://www.ftdichip.com/Drivers/D2XX.htm
-  - At the ``Mac OS X` row, download the link `D2xxHelper` embedded in the text
-    in the last column, **not* the x64 driver.
+  - At the `Mac OS X` row, download the link `D2xxHelper` embedded in the text
+    in the last column, **not** the x64 driver.
 - Run `D2xxHelper_xxx.pkg` you just downloaded.
 - Reboot.
 
