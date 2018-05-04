@@ -38,9 +38,15 @@ sudo udevadm trigger --verbose
 
 - Configure cgo as explained at
   [extra/README.md](https://github.com/periph/extra/tree/master/README.md#macos).
+- Then unload the
+  [AppleUSBFTDI](https://developer.apple.com/library/content/technotes/tn2315/_index.html)
+  kernel driver with one of the two following ways:
 
 
 #### Temporary
+
+This temporarily unload Apple's FTDI driver. This needs to be done after each
+OS startup:
 
 ```
 sudo kextunload -b com.apple.driver.AppleUSBFTDI
@@ -49,15 +55,25 @@ sudo kextunload -b com.apple.driver.AppleUSBFTDI
 
 #### Permanently
 
-TODO.
+This permanently disable Apple's FTDI driver.
+
+- Visit http://www.ftdichip.com/Drivers/D2XX.htm
+  - At the ``Mac OS X` row, download the link `D2xxHelper` embedded in the text
+    in the last column, **not* the x64 driver.
+- Run `D2xxHelper_xxx.pkg` you just downloaded.
+- Reboot.
 
 
 ### Windows
 
-- Once you connect the device, Windows Update should install the FTDI D2XX
-  driver automatically. Wait for it to occur.
-- If this fails, install the driver from
-  http://www.ftdichip.com/Drivers/D2XX.htm
+- Connect the device.
+- Windows Update should install the FTDI D2XX driver automatically. Wait for it
+  to occur.
+  - If this fails, install the driver from
+    http://www.ftdichip.com/Drivers/D2XX.htm
+
+That's it! Nothing to do.
+
 
 ## Included driver license
 
