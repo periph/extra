@@ -20,24 +20,33 @@ import (
 	"periph.io/x/periph/conn/spi"
 )
 
+// spiPort is an SPI port over an FTDI device.
+//
+// TODO(maruel): This is currently hardcoded for the FT232H in MPSSE mode but
+// in theory it should be possible to make it work on an FT232R in synchronous
+// mode, albeit at a lower clock rate and higher overhead.
 type spiPort struct {
-	f *FT232H
+	f     *FT232H
+	maxHz int64
 }
 
 func (s *spiPort) Close() error {
+	s.f.mu.Lock()
+	s.f.usingSPI = false
+	s.f.mu.Unlock()
 	return nil
 }
 
 func (s *spiPort) String() string {
-	return "SPI(" + s.f.String() + ")"
+	return s.f.String()
 }
 
 func (s *spiPort) Connect(maxHz int64, m spi.Mode, bits int) (spi.Conn, error) {
 	if maxHz > 30000000 {
 		return nil, errors.New("d2xx: maximum supported clock is 30MHz")
 	}
-	if _, err := s.f.h.mpsseClock(int(maxHz)); err != nil {
-		return nil, err
+	if maxHz < 100 {
+		return nil, errors.New("d2xx: minimum supported clock is 100Hz")
 	}
 	if bits&7 != 0 {
 		return nil, errors.New("d2xx: bits must be multiple of 8")
@@ -46,6 +55,7 @@ func (s *spiPort) Connect(maxHz int64, m spi.Mode, bits int) (spi.Conn, error) {
 	er := gpio.RisingEdge
 	clk := gpio.Low
 	switch m {
+	case spi.Mode0:
 	case spi.Mode1:
 		ew = gpio.RisingEdge
 		er = gpio.FallingEdge
@@ -55,26 +65,71 @@ func (s *spiPort) Connect(maxHz int64, m spi.Mode, bits int) (spi.Conn, error) {
 		ew = gpio.RisingEdge
 		er = gpio.FallingEdge
 		clk = gpio.High
+	default:
+		return nil, errors.New("d2xx: unknown mode")
 	}
-	// Would be faster to reuse the cached value. This call corrupts pins D3~D7.
-	//s.f.dbus.mpsseDBusRead()
-	//s.f.dbus.mpsseDBus(0x6, byte(clk))
-	if clk == gpio.High {
+
+	s.f.mu.Lock()
+	defer s.f.mu.Unlock()
+	if s.maxHz == 0 || maxHz < s.maxHz {
+		if _, err := s.f.h.mpsseClock(int(s.maxHz)); err != nil {
+			return nil, err
+		}
+		s.maxHz = maxHz
 	}
-	return &spiConn{f: s.f, hz: int(maxHz), ew: ew, er: er}, nil
+	// Note: D4~D8 are unusable.
+	// D1 and D3 are output.
+	mask := byte(1)<<1 | byte(1)<<3
+	b := byte(0)
+	if clk {
+		b = 1
+	}
+	if err := s.f.h.mpsseDBus(mask, b); err != nil {
+		return nil, err
+	}
+	s.f.usingSPI = true
+	return &spiConn{f: s.f, ew: ew, er: er}, nil
 }
 
 func (s *spiPort) LimitSpeed(maxHz int64) error {
 	if maxHz > 30000000 {
 		return errors.New("d2xx: maximum supported clock is 30MHz")
 	}
-	_, err := s.f.h.mpsseClock(int(maxHz))
+	if maxHz < 100 {
+		return errors.New("d2xx: minimum supported clock is 100Hz")
+	}
+	s.f.mu.Lock()
+	defer s.f.mu.Unlock()
+	if s.maxHz != 0 && s.maxHz <= maxHz {
+		return nil
+	}
+	s.maxHz = maxHz
+	_, err := s.f.h.mpsseClock(int(s.maxHz))
 	return err
+}
+
+// CLK returns the SCK (clock) pin.
+func (s *spiPort) CLK() gpio.PinOut {
+	return s.f.D0
+}
+
+// MOSI returns the SDO (master out, slave in) pin.
+func (s *spiPort) MOSI() gpio.PinOut {
+	return s.f.D1
+}
+
+// MISO returns the SDI (master in, slave out) pin.
+func (s *spiPort) MISO() gpio.PinIn {
+	return s.f.D2
+}
+
+// CS returns the CSN (chip select) pin.
+func (s *spiPort) CS() gpio.PinOut {
+	return s.f.D3
 }
 
 type spiConn struct {
 	f  *FT232H
-	hz int
 	ew gpio.Edge
 	er gpio.Edge
 }
@@ -84,21 +139,79 @@ func (s *spiConn) String() string {
 }
 
 func (s *spiConn) Tx(w, r []byte) error {
-	// When the buffer is >64Kb, cut it in parts and do not request a
-	// flush. Still try to read though.
-	// Assert CS
-	// Should deassert before calling read.
-	// Deassert CS
-	return s.f.h.mpsseTx(w, r, s.ew, s.er, false)
+	var p = [1]spi.Packet{{W: w, R: r}}
+	return s.TxPackets(p[:])
 }
 
 func (s *spiConn) Duplex() conn.Duplex {
+	// TODO(maruel): Support half if there's a need.
 	return conn.Full
 }
 
-func (s *spiConn) TxPackets(p []spi.Packet) error {
-	// The idea is to push the commands and read a bit but not ask to flush.
-	return errors.New("d2xx: TxPackets not implemented")
+func (s *spiConn) TxPackets(pkts []spi.Packet) error {
+	// Do not keep the lock during this function. This permits calling on the CBus
+	// too.
+	// TODO(maruel): One lock for CBus and one for DBus?
+	for _, p := range pkts {
+		if p.BitsPerWord&7 != 0 {
+			return errors.New("d2xx: bits must be a multiple of 8")
+		}
+		if err := verifyBuffers(p.W, p.R); err != nil {
+			return err
+		}
+	}
+	for _, p := range pkts {
+		if len(p.W) == 0 && len(p.R) == 0 {
+			continue
+		}
+		// TODO(maruel): Assert CS.
+		// TODO(maruel): Bits handling.
+		if err := s.f.h.mpsseTx(p.W, p.R, s.ew, s.er, false); err != nil {
+			return err
+		}
+		// TODO(maruel): Deassert CS.
+	}
+	return nil
+}
+
+// CLK returns the SCK (clock) pin.
+func (s *spiConn) CLK() gpio.PinOut {
+	return s.f.D0
+}
+
+// MOSI returns the SDO (master out, slave in) pin.
+func (s *spiConn) MOSI() gpio.PinOut {
+	return s.f.D1
+}
+
+// MISO returns the SDI (master in, slave out) pin.
+func (s *spiConn) MISO() gpio.PinIn {
+	return s.f.D2
+}
+
+// CS returns the CSN (chip select) pin.
+func (s *spiConn) CS() gpio.PinOut {
+	return s.f.D3
+}
+
+func verifyBuffers(w, r []byte) error {
+	if len(w) != 0 {
+		if len(r) != 0 {
+			if len(w) != len(r) {
+				return errors.New("d2xx: both buffers must have the same size")
+			}
+		}
+		// TODO(maruel): When the buffer is >64Kb, cut it in parts and do not
+		// request a flush. Still try to read though.
+		if len(w) > 65536 {
+			return errors.New("d2xx: maximum buffer size is 64Kb")
+		}
+	} else if len(r) != 0 {
+		if len(r) > 65536 {
+			return errors.New("d2xx: maximum buffer size is 64Kb")
+		}
+	}
+	return nil
 }
 
 var _ spi.PortCloser = &spiPort{}

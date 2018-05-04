@@ -7,6 +7,7 @@ package d2xx
 import (
 	"errors"
 	"strconv"
+	"sync"
 
 	"periph.io/x/periph/conn"
 	"periph.io/x/periph/conn/gpio"
@@ -98,9 +99,13 @@ type Info struct {
 type Dev interface {
 	String() string
 	conn.Resource
+	// GetInfo returns information about an opened device.
 	GetInfo(i *Info)
+	// Header returns the GPIO pins exposed on the chip.
 	Header() []gpio.PinIO
+	// I2C returns an I²C bus if this device can expose one.
 	I2C() (i2c.BusCloser, error)
+	// SPI returns a SPI port if this device can expose one.
 	SPI() (spi.PortCloser, error)
 }
 
@@ -143,6 +148,7 @@ func (b *broken) SPI() (spi.PortCloser, error) {
 //
 // It is used for the models that this package doesn't fully support yet.
 type generic struct {
+	// Immutable after initialization.
 	index int
 	h     *device // it may be nil if the device couldn't be opened.
 	info  Info
@@ -159,7 +165,7 @@ func (f *generic) Halt() error {
 	return f.h.reset()
 }
 
-// GetDevInfo returns information about an opened device.
+// GetInfo returns information about an opened device.
 func (f *generic) GetInfo(i *Info) {
 	*i = f.info
 }
@@ -169,12 +175,10 @@ func (f *generic) Header() []gpio.PinIO {
 	return nil
 }
 
-// I2C returns an I²C bus if possible.
 func (f *generic) I2C() (i2c.BusCloser, error) {
 	return nil, errors.New("d2xx: I²C not supported on " + f.typeName())
 }
 
-// SPI returns an SPI bus if possible.
 func (f *generic) SPI() (spi.PortCloser, error) {
 	return nil, errors.New("d2xx: SPI not supported on " + f.typeName())
 }
@@ -273,10 +277,13 @@ type FT232H struct {
 	C8 gpio.PinIO // Not implemented
 	C9 gpio.PinIO // Not implemented
 
-	cbus    gpiosMPSSE
-	dbus    gpiosMPSSE
-	i2cBus  i2c.BusCloser
-	spiPort spi.PortCloser
+	mu       sync.Mutex
+	usingI2C bool
+	usingSPI bool
+	cbus     gpiosMPSSE
+	dbus     gpiosMPSSE
+	//i2cBus   i2c.BusCloser
+	//spiPort  spiPort
 
 	hdr [18]gpio.PinIO
 }
@@ -296,9 +303,6 @@ func (f *FT232H) Header() []gpio.PinIO {
 //
 // 0 direction means input, 1 means output.
 func (f *FT232H) CBus(direction, value byte) error {
-	if f.h == nil {
-		return errors.New("d2xx: device is not opened")
-	}
 	return f.h.mpsseCBus(direction, value)
 }
 
@@ -308,39 +312,42 @@ func (f *FT232H) CBus(direction, value byte) error {
 //
 // This function must be used to set Clock idle level.
 func (f *FT232H) DBus(direction, value byte) error {
-	if f.h == nil {
-		return errors.New("d2xx: device is not opened")
-	}
 	return f.h.mpsseDBus(direction, value)
 }
 
 // CBusRead reads the values of C0 to C7.
 func (f *FT232H) CBusRead() (byte, error) {
-	if f.h == nil {
-		return 0, errors.New("d2xx: device is not opened")
-	}
 	return f.h.mpsseCBusRead()
 }
 
 // DBusRead reads the values of D0 to D7.
 func (f *FT232H) DBusRead() (byte, error) {
-	if f.h == nil {
-		return 0, errors.New("d2xx: device is not opened")
-	}
 	return f.h.mpsseDBusRead()
 }
 
-// I2C returns an I²C bus if possible.
+// I2C returns an I²C bus if this device can expose one.
 func (f *FT232H) I2C() (i2c.BusCloser, error) {
 	// Set clock 3 phases.
 	// Set clock freq.
 	return nil, errors.New("d2xx: not implemented yet")
 }
 
-// SPI returns an SPI bus if possible.
+// SPI returns a SPI port if this device can expose one.
+//
+// It uses D0, D1, D2 and D3. D0 is the clock, D1 the output, D2 is the input
+// and D3 is CS line.
 func (f *FT232H) SPI() (spi.PortCloser, error) {
-	// Set clock freq.
-	return nil, errors.New("d2xx: not implemented yet")
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.usingI2C {
+		return nil, errors.New("d2xx: already using I²C")
+	}
+	if f.usingSPI {
+		return nil, errors.New("d2xx: already using SPI")
+	}
+	// Don't mark it as being used yet. It only become used once Connect() is
+	// called.
+	return &spiPort{f: f}, nil
 }
 
 //

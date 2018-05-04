@@ -8,8 +8,10 @@ import (
 	"sync"
 
 	"periph.io/x/periph"
+	"periph.io/x/periph/conn/i2c/i2creg"
 	"periph.io/x/periph/conn/pin"
 	"periph.io/x/periph/conn/pin/pinreg"
+	"periph.io/x/periph/conn/spi/spireg"
 )
 
 // All enumerates all the connected FTDI devices.
@@ -36,10 +38,9 @@ func open(i int) (Dev, error) {
 	if err != nil {
 		return nil, err
 	}
-	var info Info
-	h.getI(&info)
-	g := generic{index: i, h: h, info: info}
-	switch info.Type {
+	g := generic{index: i, h: h}
+	h.getI(&g.info)
+	switch g.info.Type {
 	case "ft232h":
 		return newFT232H(g), nil
 	case "ft232r":
@@ -47,6 +48,29 @@ func open(i int) (Dev, error) {
 	default:
 		return &g, nil
 	}
+}
+
+// registerDev registers the header and supported buses and ports in the
+// relevant registries.
+func registerDev(d Dev) error {
+	hdr := d.Header()
+	p := make([][]pin.Pin, len(hdr))
+	for i := range hdr {
+		p[i] = []pin.Pin{hdr[i]}
+	}
+	if err := pinreg.Register(d.String(), p); err != nil {
+		return err
+	}
+	switch d.(type) {
+	case *FT232H:
+		if err := i2creg.Register(d.String(), nil, -1, d.I2C); err != nil {
+			return err
+		}
+		if err := spireg.Register(d.String(), nil, -1, d.SPI); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // driver implements periph.Driver.
@@ -70,12 +94,7 @@ func (d *driver) Init() (bool, error) {
 		// TODO(maruel): Close the device one day. :)
 		if d, err1 := open(i); err1 == nil {
 			all = append(all, d)
-			hdr := d.Header()
-			p := make([][]pin.Pin, len(hdr))
-			for i := range hdr {
-				p[i] = []pin.Pin{hdr[i]}
-			}
-			if err := pinreg.Register(d.String(), p); err != nil {
+			if err := registerDev(d); err != nil {
 				return true, err
 			}
 		} else {

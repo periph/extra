@@ -201,7 +201,6 @@ func (d *device) setupMPSSE() error {
 		return err
 	}
 	// Success!!
-	d.isMPSSE = true
 	return nil
 }
 
@@ -333,6 +332,9 @@ func (d *device) mpsseCBus(mask, value byte) error {
 	return err
 }
 
+// mpsseDBus operates on 8 GPIOs at a time D0~D7.
+//
+// Direction 1 means output, 0 means input.
 func (d *device) mpsseDBus(mask, value byte) error {
 	b := [...]byte{gpioSetD, mask, value}
 	_, err := d.write(b[:])

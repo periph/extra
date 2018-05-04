@@ -81,17 +81,21 @@ func openDev(i int) (*device, error) {
 }
 
 // device is the low level d2xx device handle.
+//
+// The content of the struct is immutable after initialization.
 type device struct {
-	h              handle
-	t              devType
-	venID          uint16
-	devID          uint16
+	h     handle
+	t     devType
+	venID uint16
+	devID uint16
+
+	// eepromt is the raw content.
+	eeprom []byte
+	// These values come from the EEPROM.
 	manufacturer   string
 	manufacturerID string
 	desc           string
 	serial         string
-	eeprom         []byte
-	isMPSSE        bool // if false, uses CBus bitbang
 }
 
 func (d *device) closeDev() error {
