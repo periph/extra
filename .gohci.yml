@@ -16,6 +16,11 @@ workers:
   - cmd:
     - d2xx
   - cmd:
+    - extra-smoketest
+    - d2xx
+    - -type
+    - ft232r
+  - cmd:
     - go
     - install
     - -tags
@@ -61,6 +66,11 @@ workers:
     - ./cmd/...
   - cmd:
     - d2xx
+  - cmd:
+    - extra-smoketest
+    - d2xx
+    - -type
+    - ft232h
   - cmd:
     - go
     - install
