@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"periph.io/x/periph"
+	"periph.io/x/periph/conn/i2c/i2creg"
 	"periph.io/x/periph/conn/pin"
 	"periph.io/x/periph/conn/pin/pinreg"
 	"periph.io/x/periph/conn/spi/spireg"
@@ -62,11 +63,9 @@ func registerDev(d Dev) error {
 	}
 	switch t := d.(type) {
 	case *FT232H:
-		/* Soon.
 		if err := i2creg.Register(d.String(), nil, -1, t.I2C); err != nil {
 			return err
 		}
-		*/
 		if err := spireg.Register(d.String(), nil, -1, t.SPI); err != nil {
 			return err
 		}

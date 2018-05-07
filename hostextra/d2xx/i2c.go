@@ -14,46 +14,220 @@
 
 package d2xx
 
-/*
-// Page 10-11.
-func (d *device) setI2CLinesIdle() error {
-	// Set all D0~D7 lines high.
-	// D0: SCL
-	// D1: SDA, open drain, pulled up externally
-	// D2: DATA IN (?)
-	// D3~D7 as inputs
-	// C0~C7 to high
-	// C6: LED
-	// C0~C5, C6~C7 as input
-	_, err := write([]byte{0x80, 0xFF, 0xFB, 0x82, 0xFF, 0x40})
+import (
+	"errors"
+
+	"periph.io/x/periph/conn"
+	"periph.io/x/periph/conn/gpio"
+	"periph.io/x/periph/conn/i2c"
+)
+
+type i2cBus struct {
+	f *FT232H
+}
+
+// Close stops I²C mode, returns to high speed mode, disable tri-state.
+func (d *i2cBus) Close() error {
+	d.f.mu.Lock()
+	err := d.stopI2C()
+	d.f.mu.Unlock()
 	return err
 }
 
-// Page 11-12.
-func (d *device) setI2CStart() error {
+// Duplex implements conn.Conn.
+func (d *i2cBus) Duplex() conn.Duplex {
+	return conn.Half
+}
+
+func (d *i2cBus) String() string {
+	return d.f.String()
+}
+
+// SetSpeed implements i2c.Bus.
+func (d *i2cBus) SetSpeed(hz int64) error {
+	clk := ((30000000 / hz) - 1) * 2 / 3
+	cmd := [...]byte{
+		clock30MHz, byte(clk), byte(clk >> 8),
+	}
+	if _, err := d.f.h.write(cmd[:]); err != nil {
+		return err
+	}
+	return d.setI2CLinesIdle()
+}
+
+// Tx implements i2c.Bus.
+func (d *i2cBus) Tx(addr uint16, w, r []byte) error {
+	d.f.mu.Lock()
+	defer d.f.mu.Unlock()
+	if err := d.setI2CStart(); err != nil {
+		return err
+	}
+	a := [1]byte{byte(addr)}
+	if err := d.writeBytes(a[:]); err != nil {
+		return err
+	}
+	if len(w) != 0 {
+		if err := d.writeBytes(w); err != nil {
+			return err
+		}
+	}
+	if len(r) != 0 {
+		if err := d.readBytes(r); err != nil {
+			return err
+		}
+	}
+	if err := d.setI2CStop(); err != nil {
+		return err
+	}
+	return d.setI2CLinesIdle()
+}
+
+// SCL implements i2c.Pins.
+func (d *i2cBus) SCL() gpio.PinIO {
+	return d.f.D0
+}
+
+// SDA implements i2c.Pins.
+func (d *i2cBus) SDA() gpio.PinIO {
+	return d.f.D1
+}
+
+// It is recommended to set the mode to ‘245 FIFO’ in the EEPROM of the FT232H.
+//
+// The FIFO mode is recommended because it allows the ADbus lines to start as
+// tristate. If the chip starts in the default UART mode, then the ADbus lines
+// will be in the default UART idle states until the application opens the port
+// and configures it as MPSSE. Care should also be taken that the RD# input on
+// ACBUS is not asserted in this initial state as this can cause the FIFO lines
+// to drive out.
+func (d *i2cBus) setupI2C() error {
+	// Initialize MPSSE to a known state.
+	hz := 100000
+	clk := ((30000000 / hz) - 1) * 2 / 3
+	cmd := [...]byte{
+		clock3Phase,
+		dataTristate, 0x07, 0x00,
+		clock30MHz, byte(clk), byte(clk >> 8),
+	}
+	d.f.usingI2C = true
+	if _, err := d.f.h.write(cmd[:]); err != nil {
+		return err
+	}
+	return d.setI2CLinesIdle()
+}
+
+func (d *i2cBus) stopI2C() error {
+	cmd := [...]byte{
+		clock2Phase,
+		dataTristate, 0x00, 0x00,
+		clock30MHz, 0, 0,
+	}
+	_, err := d.f.h.write(cmd[:])
+	d.f.usingI2C = false
+	return err
+}
+
+// setI2CLinesIdle sets all D0~D7 lines high.
+//
+// D0: SCL
+// D1: SDA, open drain, pulled up externally. Considered data out.
+// D2: Considered Data In so it can't be used.
+func (d *i2cBus) setI2CLinesIdle() error {
+	cmd := [...]byte{gpioSetD, 0xFF, 0xFB}
+	_, err := d.f.h.write(cmd[:])
+	return err
+}
+
+func (d *i2cBus) setI2CStart() error {
+	// Runs the command 4 times as a way to delay execution.
+	cmd := [...]byte{
+		// SDA low
+		gpioSetD, 0xFD, 0xFB,
+		gpioSetD, 0xFD, 0xFB,
+		gpioSetD, 0xFD, 0xFB,
+		gpioSetD, 0xFD, 0xFB,
+		// SCL low
+		gpioSetD, 0xFC, 0xFB,
+		gpioSetD, 0xFC, 0xFB,
+		gpioSetD, 0xFC, 0xFB,
+		gpioSetD, 0xFC, 0xFB,
+	}
+	_, err := d.f.h.write(cmd[:])
+	return err
+}
+
+func (d *i2cBus) setI2CStop() error {
+	// Runs the command 4 times as a way to delay execution.
+	cmd := [...]byte{
+		// SCL low
+		gpioSetD, 0xFC, 0xFB,
+		gpioSetD, 0xFC, 0xFB,
+		gpioSetD, 0xFC, 0xFB,
+		gpioSetD, 0xFC, 0xFB,
+		// SDA low
+		gpioSetD, 0xFD, 0xFB,
+		gpioSetD, 0xFD, 0xFB,
+		gpioSetD, 0xFD, 0xFB,
+		gpioSetD, 0xFD, 0xFB,
+		// SDA and SCL high
+		gpioSetD, 0xFF, 0xFB,
+		gpioSetD, 0xFF, 0xFB,
+		gpioSetD, 0xFF, 0xFB,
+		gpioSetD, 0xFF, 0xFB,
+	}
+	_, err := d.f.h.write(cmd[:])
+	return err
+}
+
+func (d *i2cBus) writeBytes(w []byte) error {
+	// TODO(maruel): Implement both with and without NAK check.
+	var r [1]byte
+	for i := range w {
+		cmd := [...]byte{
+			dataOut | dataOutFall, 0x00, 0x00, w[i],
+			gpioSetD, 0xFE, 0xFb,
+			dataIn | dataBit, 0x00,
+			flush,
+		}
+		if _, err := d.f.h.write(cmd[:]); err != nil {
+			return err
+		}
+		if _, err := d.f.h.read(r[:]); err != nil {
+			return err
+		}
+		if r[0]&1 == 0 {
+			return errors.New("got NAK")
+		}
+	}
 	return nil
 }
 
-// Page 12-13.
-func (d *device) setI2CStop() error {
+func (d *i2cBus) readBytes(r []byte) error {
+	var ack byte
+	for i := range r {
+		if i == len(r)-1 {
+			// NAK.
+			ack = 0xFF
+		}
+		cmd := [...]byte{
+			// Length 0 means one byte in.
+			// TODO(maruel): dataBit.
+			dataIn, 0x00, 0x00,
+			dataOut | dataOutFall | dataBit, 0x00, ack,
+			gpioSetD, 0xFE, 0xFB,
+			// Force read buffer flush. This is only necessary if NAK are not ignored.
+			flush,
+		}
+		if _, err := d.f.h.write(cmd[:]); err != nil {
+			return err
+		}
+		// TODO(maruel): Create a buffer version.
+		if _, err := d.f.h.read(r[i:1]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
-// Page 13-14.
-func (d *device) readByteAndSendNAK() (byte, error) {
-}
-
-// Page 14-15.
-func (d *device) readBytesAndSendNAK(b []byte) error {
-}
-
-// Page 15-16.
-func (d *device) sendByteAndCheckACK(b byte) error {
-}
-
-// Page 16-17.
-func (d *device) sendAddrAndCheckACK(b byte) error {
-}
-
-// TODO(maruel): Implement all the utility functions, then expose
-// https://periph.io/x/periph/conn/i2c#Bus.
-*/
+var _ i2c.BusCloser = &i2cBus{}
+var _ i2c.Pins = &i2cBus{}

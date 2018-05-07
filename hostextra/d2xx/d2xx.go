@@ -436,18 +436,18 @@ type eepromFt232h struct {
 	deviceType     devType // FTxxxx device type to be programmed
 	VendorID       uint16  // 0x0403
 	ProductID      uint16  // 0x6001
-	SerNumEnable   uint8   // non-zero if serial number to be used
-	MaxPower       uint16  // 0 < MaxPower <= 500
+	SerNumEnable   uint8   // Non-zero if serial number to be used
+	MaxPower       uint16  // 0 < MaxPower <= 500mA
 	SelfPowered    uint8   // 0 = bus powered, 1 = self powered
 	RemoteWakeup   uint8   // 0 = not capable, 1 = capable
-	PullDownEnable uint8   //
+	PullDownEnable uint8   // Non zero if pull down in suspect enabled
 
 	// ft232h specific.
-	ACSlowSlew        uint8 // AC bus pins have slow slew
-	ACSchmittInput    uint8 // AC bus pins are Schmitt input
-	ACDriveCurrent    uint8 // valid values are 4mA, 8mA, 12mA, 16mA
-	ADSlowSlew        uint8 // non-zero if AD bus pins have slow slew
-	ADSchmittInput    uint8 // non-zero if AD bus pins are Schmitt input
+	ACSlowSlew        uint8 // Non-zero if AC bus pins have slow slew
+	ACSchmittInput    uint8 // Non-zero if AC bus pins are Schmitt input
+	ACDriveCurrent    uint8 // Valid values are 4mA, 8mA, 12mA, 16mA
+	ADSlowSlew        uint8 // Non-zero if AD bus pins have slow slew
+	ADSchmittInput    uint8 // Non-zero if AD bus pins are Schmitt input
 	ADDriveCurrent    uint8 // valid values are 4mA, 8mA, 12mA, 16mA
 	Cbus0             uint8 // Cbus Mux control
 	Cbus1             uint8 // Cbus Mux control
@@ -462,10 +462,10 @@ type eepromFt232h struct {
 	FT1248Cpol        uint8 // FT1248 clock polarity - clock idle high (true) or clock idle low (false)
 	FT1248Lsb         uint8 // FT1248 data is LSB (true), or MSB (false)
 	FT1248FlowControl uint8 // FT1248 flow control enable
-	IsFifo            uint8 // Interface is 245 FIFO
-	IsFifoTar         uint8 // Interface is 245 FIFO CPU target
-	IsFastSer         uint8 // Interface is Fast serial
-	IsFT1248          uint8 // Interface is FT1248
+	IsFifo            uint8 // Non-zero if Interface is 245 FIFO
+	IsFifoTar         uint8 // Non-zero if Interface is 245 FIFO CPU target
+	IsFastSer         uint8 // Non-zero if Interface is Fast serial
+	IsFT1248          uint8 // Non-zero if Interface is FT1248
 	PowerSaveEnable   uint8 //
 	DriverType        uint8 //
 }
@@ -476,15 +476,15 @@ type eepromFt232r struct {
 	deviceType     devType // FTxxxx device type to be programmed
 	VendorID       uint16  // 0x0403
 	ProductID      uint16  // 0x6001
-	SerNumEnable   uint8   // non-zero if serial number to be used
-	MaxPower       uint16  // 0 < MaxPower <= 500
+	SerNumEnable   uint8   // Non-zero if serial number to be used
+	MaxPower       uint16  // 0 < MaxPower <= 500mA
 	SelfPowered    uint8   // 0 = bus powered, 1 = self powered
 	RemoteWakeup   uint8   // 0 = not capable, 1 = capable
-	PullDownEnable uint8   //
+	PullDownEnable uint8   // Non zero if pull down in suspect enabled
 
 	// ft232r specific.
-	IsHighCurrent uint8
-	UseExtOsc     uint8
+	IsHighCurrent uint8 // High Drive I/Os
+	UseExtOsc     uint8 // Use external oscillator
 	InvertTXD     uint8
 	InvertRXD     uint8
 	InvertRTS     uint8

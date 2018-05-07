@@ -45,6 +45,7 @@ const (
 
 	// Data line drives low when the data is 0 and tristates high on data 1. This
 	// is used with I²C.
+	// <op>, <ADBus pins>, <ACBus pins>
 	dataTristate byte = 0x9E
 
 	// TSM operation (for JTAG).
@@ -66,8 +67,9 @@ const (
 	// - Direction 1 means output, 0 means input.
 	//
 	// <op>, <value>, <direction>
-	gpioSetD  byte = 0x80
-	gpioSetC  byte = 0x82
+	gpioSetD byte = 0x80
+	gpioSetC byte = 0x82
+	// <op>, returns <value>
 	gpioReadD byte = 0x81
 	gpioReadC byte = 0x83
 

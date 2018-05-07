@@ -11,6 +11,7 @@ import (
 
 	"periph.io/x/periph/conn"
 	"periph.io/x/periph/conn/gpio"
+	"periph.io/x/periph/conn/i2c"
 	"periph.io/x/periph/conn/spi"
 )
 
@@ -308,14 +309,23 @@ func (f *FT232H) DBusRead() (byte, error) {
 	return f.h.mpsseDBusRead()
 }
 
-/* Soon
 // I2C returns an I²C bus if this device can expose one.
 func (f *FT232H) I2C() (i2c.BusCloser, error) {
-	// Set clock 3 phases.
-	// Set clock freq.
-	return nil, errors.New("d2xx: not implemented yet")
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.usingI2C {
+		return nil, errors.New("d2xx: already using I²C")
+	}
+	if f.usingSPI {
+		return nil, errors.New("d2xx: already using SPI")
+	}
+	i := &i2cBus{f: f}
+	if err := i.setupI2C(); err != nil {
+		i.stopI2C()
+		return nil, err
+	}
+	return i, nil
 }
-*/
 
 // SPI returns a SPI port if this device can expose one.
 //
