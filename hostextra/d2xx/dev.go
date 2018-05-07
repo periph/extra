@@ -11,7 +11,6 @@ import (
 
 	"periph.io/x/periph/conn"
 	"periph.io/x/periph/conn/gpio"
-	"periph.io/x/periph/conn/i2c"
 	"periph.io/x/periph/conn/spi"
 )
 
@@ -96,6 +95,10 @@ type Info struct {
 // Dev represents one FTDI device.
 //
 // There can be multiple FTDI devices connected to a host.
+//
+// The device may also export one or multiple of I²C, SPI buses. You need to
+// either cast into the right hardware, but more simply use the i2creg / spireg
+// bus/port registries.
 type Dev interface {
 	String() string
 	conn.Resource
@@ -103,10 +106,6 @@ type Dev interface {
 	GetInfo(i *Info)
 	// Header returns the GPIO pins exposed on the chip.
 	Header() []gpio.PinIO
-	// I2C returns an I²C bus if this device can expose one.
-	I2C() (i2c.BusCloser, error)
-	// SPI returns a SPI port if this device can expose one.
-	SPI() (spi.PortCloser, error)
 }
 
 // TODO(maruel): JTAG, Parallel, UART.
@@ -134,14 +133,6 @@ func (b *broken) GetInfo(i *Info) {
 
 func (b *broken) Header() []gpio.PinIO {
 	return nil
-}
-
-func (b *broken) I2C() (i2c.BusCloser, error) {
-	return nil, b.err
-}
-
-func (b *broken) SPI() (spi.PortCloser, error) {
-	return nil, b.err
 }
 
 // generic represents a generic FTDI device.
@@ -173,14 +164,6 @@ func (f *generic) GetInfo(i *Info) {
 // Header returns the GPIO pins exposed on the chip.
 func (f *generic) Header() []gpio.PinIO {
 	return nil
-}
-
-func (f *generic) I2C() (i2c.BusCloser, error) {
-	return nil, errors.New("d2xx: I²C not supported on " + f.typeName())
-}
-
-func (f *generic) SPI() (spi.PortCloser, error) {
-	return nil, errors.New("d2xx: SPI not supported on " + f.typeName())
 }
 
 func (f *generic) typeName() string {
@@ -325,12 +308,14 @@ func (f *FT232H) DBusRead() (byte, error) {
 	return f.h.mpsseDBusRead()
 }
 
+/* Soon
 // I2C returns an I²C bus if this device can expose one.
 func (f *FT232H) I2C() (i2c.BusCloser, error) {
 	// Set clock 3 phases.
 	// Set clock freq.
 	return nil, errors.New("d2xx: not implemented yet")
 }
+*/
 
 // SPI returns a SPI port if this device can expose one.
 //
