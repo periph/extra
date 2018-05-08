@@ -20,11 +20,8 @@ import (
 	"periph.io/x/periph/conn/spi"
 )
 
-// spiPort is an SPI port over an FTDI device.
-//
-// TODO(maruel): This is currently hardcoded for the FT232H in MPSSE mode but
-// in theory it should be possible to make it work on an FT232R in synchronous
-// mode, albeit at a lower clock rate and higher overhead.
+// spiPort is an SPI port over an FTDI device in MPSSE mode using the data
+// command on the AD bus.
 type spiPort struct {
 	f     *FT232H
 	maxHz int64
@@ -41,6 +38,7 @@ func (s *spiPort) String() string {
 	return s.f.String()
 }
 
+// Connect implements spi.Port.
 func (s *spiPort) Connect(maxHz int64, m spi.Mode, bits int) (spi.Conn, error) {
 	if maxHz > 30000000 {
 		return nil, errors.New("d2xx: maximum supported clock is 30MHz")
@@ -91,6 +89,7 @@ func (s *spiPort) Connect(maxHz int64, m spi.Mode, bits int) (spi.Conn, error) {
 	return &spiConn{f: s.f, ew: ew, er: er}, nil
 }
 
+// LimitSpeed implements spi.Port.
 func (s *spiPort) LimitSpeed(maxHz int64) error {
 	if maxHz > 30000000 {
 		return errors.New("d2xx: maximum supported clock is 30MHz")
@@ -135,7 +134,7 @@ type spiConn struct {
 }
 
 func (s *spiConn) String() string {
-	return "SPI(" + s.f.String() + ")"
+	return s.f.String()
 }
 
 func (s *spiConn) Tx(w, r []byte) error {

@@ -92,14 +92,6 @@ func (d *i2cBus) SDA() gpio.PinIO {
 	return d.f.D1
 }
 
-// It is recommended to set the mode to ‘245 FIFO’ in the EEPROM of the FT232H.
-//
-// The FIFO mode is recommended because it allows the ADbus lines to start as
-// tristate. If the chip starts in the default UART mode, then the ADbus lines
-// will be in the default UART idle states until the application opens the port
-// and configures it as MPSSE. Care should also be taken that the RD# input on
-// ACBUS is not asserted in this initial state as this can cause the FIFO lines
-// to drive out.
 func (d *i2cBus) setupI2C() error {
 	// Initialize MPSSE to a known state.
 	hz := 100000
@@ -128,10 +120,6 @@ func (d *i2cBus) stopI2C() error {
 }
 
 // setI2CLinesIdle sets all D0~D7 lines high.
-//
-// D0: SCL
-// D1: SDA, open drain, pulled up externally. Considered data out.
-// D2: Considered Data In so it can't be used.
 func (d *i2cBus) setI2CLinesIdle() error {
 	cmd := [...]byte{gpioSetD, 0xFF, 0xFB}
 	_, err := d.f.h.write(cmd[:])

@@ -309,7 +309,23 @@ func (f *FT232H) DBusRead() (byte, error) {
 	return f.h.mpsseDBusRead()
 }
 
-// I2C returns an I²C bus if this device can expose one.
+// I2C returns an I²C bus over the AD bus.
+//
+// It uses D0, D1 and D2.
+//
+// D0 is SCL. It needs to be pulled up externally.
+//
+// D1 and D2 are used for SDA. D1 is the output using open drain, D2 is the
+// input. D1 and D2 need to be wired together and pulled up externally.
+//
+// It is recommended to set the mode to ‘245 FIFO’ in the EEPROM of the FT232H.
+//
+// The FIFO mode is recommended because it allows the ADbus lines to start as
+// tristate. If the chip starts in the default UART mode, then the ADbus lines
+// will be in the default UART idle states until the application opens the port
+// and configures it as MPSSE. Care should also be taken that the RD# input on
+// ACBUS is not asserted in this initial state as this can cause the FIFO lines
+// to drive out.
 func (f *FT232H) I2C() (i2c.BusCloser, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -327,10 +343,10 @@ func (f *FT232H) I2C() (i2c.BusCloser, error) {
 	return i, nil
 }
 
-// SPI returns a SPI port if this device can expose one.
+// SPI returns a SPI port over the AD bus.
 //
-// It uses D0, D1, D2 and D3. D0 is the clock, D1 the output, D2 is the input
-// and D3 is CS line.
+// It uses D0, D1, D2 and D3. D0 is the clock, D1 the output (MOSI), D2 is the
+// input (MISO) and D3 is CS line.
 func (f *FT232H) SPI() (spi.PortCloser, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
