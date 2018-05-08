@@ -25,6 +25,7 @@ import (
 type spiPort struct {
 	f     *FT232H
 	maxHz int64
+	c     spiConn
 }
 
 func (s *spiPort) Close() error {
@@ -49,19 +50,19 @@ func (s *spiPort) Connect(maxHz int64, m spi.Mode, bits int) (spi.Conn, error) {
 	if bits&7 != 0 {
 		return nil, errors.New("d2xx: bits must be multiple of 8")
 	}
-	ew := gpio.FallingEdge
-	er := gpio.RisingEdge
+	s.c.ew = gpio.FallingEdge
+	s.c.er = gpio.RisingEdge
 	clk := gpio.Low
 	switch m {
 	case spi.Mode0:
 	case spi.Mode1:
-		ew = gpio.RisingEdge
-		er = gpio.FallingEdge
+		s.c.ew = gpio.RisingEdge
+		s.c.er = gpio.FallingEdge
 	case spi.Mode2:
 		clk = gpio.High
 	case spi.Mode3:
-		ew = gpio.RisingEdge
-		er = gpio.FallingEdge
+		s.c.ew = gpio.RisingEdge
+		s.c.er = gpio.FallingEdge
 		clk = gpio.High
 	default:
 		return nil, errors.New("d2xx: unknown mode")
@@ -86,7 +87,8 @@ func (s *spiPort) Connect(maxHz int64, m spi.Mode, bits int) (spi.Conn, error) {
 		return nil, err
 	}
 	s.f.usingSPI = true
-	return &spiConn{f: s.f, ew: ew, er: er}, nil
+	s.c.f = s.f
+	return &s.c, nil
 }
 
 // LimitSpeed implements spi.Port.

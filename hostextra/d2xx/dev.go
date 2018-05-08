@@ -266,8 +266,8 @@ type FT232H struct {
 	usingSPI bool
 	cbus     gpiosMPSSE
 	dbus     gpiosMPSSE
-	//i2cBus   i2c.BusCloser
-	//spiPort  spiPort
+	i        i2cBus
+	s        spiPort
 
 	hdr [18]gpio.PinIO
 }
@@ -335,12 +335,12 @@ func (f *FT232H) I2C() (i2c.BusCloser, error) {
 	if f.usingSPI {
 		return nil, errors.New("d2xx: already using SPI")
 	}
-	i := &i2cBus{f: f}
-	if err := i.setupI2C(); err != nil {
-		i.stopI2C()
+	f.i.f = f
+	if err := f.i.setupI2C(); err != nil {
+		f.i.stopI2C()
 		return nil, err
 	}
-	return i, nil
+	return &f.i, nil
 }
 
 // SPI returns a SPI port over the AD bus.
@@ -358,7 +358,8 @@ func (f *FT232H) SPI() (spi.PortCloser, error) {
 	}
 	// Don't mark it as being used yet. It only become used once Connect() is
 	// called.
-	return &spiPort{f: f}, nil
+	f.s.f = f
+	return &f.s, nil
 }
 
 //
