@@ -517,4 +517,21 @@ func (g *gpioMPSSE) Out(l gpio.Level) error {
 	return g.a.out(g.num, l)
 }
 
+/*
+func (g *gpioMPSSE) Drive() physic.ElectricCurrent {
+	//return g.a.ee.CDriveCurrent * physic.MilliAmpere
+	return 2 * physic.MilliAmpere
+}
+
+func (g *gpioMPSSE) SlewLimit() bool {
+	//return g.a.ee.CSlowSlew
+	return false
+}
+
+func (g *gpioMPSSE) Hysteresis() bool {
+	//return g.a.ee.DSchmittInput
+	return true
+}
+*/
+
 var _ gpio.PinIO = &gpioMPSSE{}

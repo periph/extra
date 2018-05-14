@@ -416,19 +416,15 @@ type FT232H struct {
 	C8 gpio.PinIO // Not implemented
 	C9 gpio.PinIO // Not implemented
 
+	hdr  [18]gpio.PinIO
+	cbus gpiosMPSSE
+	dbus gpiosMPSSE
+
 	mu       sync.Mutex
 	usingI2C bool
 	usingSPI bool
-	cbus     gpiosMPSSE
-	dbus     gpiosMPSSE
 	i        i2cBus
 	s        spiPort
-
-	hdr [18]gpio.PinIO
-}
-
-func (f *FT232H) String() string {
-	return "ft232h(" + strconv.Itoa(f.index) + ")"
 }
 
 // Header returns the GPIO pins exposed on the chip.
@@ -522,25 +518,41 @@ func (f *FT232H) SPI() (spi.PortCloser, error) {
 func newFT232R(g generic) (*FT232R, error) {
 	f := &FT232R{
 		generic: g,
-		pins: [...]invalidPin{
-			{num: 0, n: "TX", f: "UART"},  // dp: gpio.PullUp
-			{num: 1, n: "RX", f: "UART"},  // dp: gpio.PullUp
-			{num: 2, n: "RTS", f: "UART"}, // dp: gpio.PullUp
-			{num: 3, n: "CTS", f: "UART"}, // dp: gpio.PullUp
-			{num: 4, n: "DTR", f: "UART"}, // dp: gpio.PullUp
-			{num: 5, n: "DSR", f: "UART"}, // dp: gpio.PullUp
-			{num: 6, n: "DCD", f: "UART"}, // dp: gpio.PullUp
-			{num: 7, n: "RI", f: "UART"},  // dp: gpio.PullUp
-			{num: 8, n: "C0"},             // dp: gpio.PullUp
-			{num: 9, n: "C1"},             // dp: gpio.PullUp
-			{num: 10, n: "C2"},            // dp: gpio.PullUp
-			{num: 11, n: "C3"},            // dp: gpio.Float
-			{num: 12, n: "C4"},            // dp: gpio.Float
+		dbus: [...]syncPin{
+			{num: 0, n: "D0/TX"},
+			{num: 1, n: "D1/RX"},
+			{num: 2, n: "D2/RTS"},
+			{num: 3, n: "D3/CTS"},
+			{num: 4, n: "D4/DTR"},
+			{num: 5, n: "D5/DSR"},
+			{num: 6, n: "D6/DCD"},
+			{num: 7, n: "D7/RI"},
 		},
+		cbus: [...]cbusPin{
+			{num: 8, n: "C0", p: gpio.PullUp},
+			{num: 9, n: "C1", p: gpio.PullUp},
+			{num: 10, n: "C2", p: gpio.PullUp},
+			{num: 11, n: "C3", p: gpio.Float},
+		},
+		cbus4: invalidPin{num: 12, n: "C4"}, // dp: gpio.Float
 	}
-	for i := range f.pins {
-		f.hdr[i] = &f.pins[i]
+	for i := range f.dbus {
+		f.dbus[i].bus = f
+		f.hdr[i] = &f.dbus[i]
 	}
+	for i := range f.cbus {
+		f.cbus[i].bus = f
+		f.hdr[i+8] = &f.cbus[i]
+	}
+	f.hdr[12] = &f.cbus4
+	f.D0 = f.hdr[0]
+	f.D1 = f.hdr[1]
+	f.D2 = f.hdr[2]
+	f.D3 = f.hdr[3]
+	f.D4 = f.hdr[4]
+	f.D5 = f.hdr[5]
+	f.D6 = f.hdr[6]
+	f.D7 = f.hdr[7]
 	f.TX = f.hdr[0]
 	f.RX = f.hdr[1]
 	f.RTS = f.hdr[2]
@@ -554,14 +566,31 @@ func newFT232R(g generic) (*FT232R, error) {
 	f.C2 = f.hdr[10]
 	f.C3 = f.hdr[11]
 	f.C4 = f.hdr[12]
-	// Synchronous bitbang.
-	if err := f.h.setBitMode(0, 4); err != nil {
-		return nil, err
-	}
+
 	// Default to 3MHz.
 	if err := f.h.setBaudRate(3000000); err != nil {
 		return nil, err
 	}
+
+	// Set all CBus pins as input.
+	if err := f.h.setBitMode(0, 0x20); err != nil {
+		return nil, err
+	}
+	// And read their value.
+	var err error
+	if f.cbusnibble, err = f.h.getBitMode(); err != nil {
+		return nil, err
+	}
+	// Set all DBus as synchronous bitbang, everything as input.
+	if err := f.h.setBitMode(0, 4); err != nil {
+		return nil, err
+	}
+	// And read their value.
+	var b [1]byte
+	if _, err := f.h.read(b[:]); err != nil {
+		return nil, err
+	}
+	f.dvalue = b[0]
 	return f, nil
 }
 
@@ -584,27 +613,42 @@ func newFT232R(g generic) (*FT232R, error) {
 type FT232R struct {
 	generic
 
-	TX  gpio.PinIO // D0 TXD
-	RX  gpio.PinIO // D1 RXD
-	RTS gpio.PinIO // D2
-	CTS gpio.PinIO // D3
-	DTR gpio.PinIO // D4
-	DSR gpio.PinIO // D5
-	DCD gpio.PinIO // D6
-	RI  gpio.PinIO // D7
+	D0 gpio.PinIO
+	D1 gpio.PinIO
+	D2 gpio.PinIO
+	D3 gpio.PinIO
+	D4 gpio.PinIO
+	D5 gpio.PinIO
+	D6 gpio.PinIO
+	D7 gpio.PinIO
+	// Aliases to the Dn pins for user convenience. They point to the exact same
+	// pin.
+	TX  gpio.PinIO
+	RX  gpio.PinIO
+	RTS gpio.PinIO
+	CTS gpio.PinIO
+	DTR gpio.PinIO
+	DSR gpio.PinIO
+	DCD gpio.PinIO
+	RI  gpio.PinIO
 
+	// The CBus pins are slower to use, but can drive an high load, like a LED.
 	C0 gpio.PinIO
 	C1 gpio.PinIO
 	C2 gpio.PinIO
 	C3 gpio.PinIO
 	C4 gpio.PinIO
 
-	pins [13]invalidPin
-	hdr  [13]gpio.PinIO
-}
+	dbus  [8]syncPin
+	cbus  [4]cbusPin
+	cbus4 invalidPin
+	hdr   [13]gpio.PinIO
 
-func (f *FT232R) String() string {
-	return "ft232r(" + strconv.Itoa(f.index) + ")"
+	// Mutable.
+	mu         sync.Mutex
+	dmask      uint8 // 0 input, 1 output
+	dvalue     uint8
+	cbusnibble uint8 // upper nibble is I/O control, lower nibble is values.
 }
 
 // Header returns the GPIO pins exposed on the chip.
@@ -612,6 +656,143 @@ func (f *FT232R) Header() []gpio.PinIO {
 	out := make([]gpio.PinIO, len(f.hdr))
 	copy(out, f.hdr[:])
 	return out
+}
+
+func (f *FT232R) syncBusFunc(n int) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	// TODO(maruel): Once UART is supported:
+	//func := []string{"TX", "RX", "RTS", "CTS", "DTR", "DSR", "DCD", "RI"}
+	mask := uint8(1 << uint(n))
+	if f.dmask&mask != 0 {
+		return "Out/" + gpio.Level(f.dvalue&mask != 0).String()
+	}
+	return "In/" + f.syncBusReadLocked(n).String()
+}
+
+func (f *FT232R) syncBusIn(n int) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	mask := uint8(1 << uint(n))
+	if f.dmask&mask == 0 {
+		// Already input.
+		return nil
+	}
+	v := f.dmask &^ mask
+	if err := f.h.setBitMode(v, 4); err != nil {
+		return err
+	}
+	f.dmask = v
+	return nil
+}
+
+func (f *FT232R) syncBusRead(n int) gpio.Level {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.syncBusReadLocked(n)
+}
+
+func (f *FT232R) syncBusReadLocked(n int) gpio.Level {
+	// In synchronous mode, to read we must write first to for a sample.
+	b := [1]byte{f.dvalue}
+	if _, err := f.h.write(b[:]); err != nil {
+		return gpio.Low
+	}
+	mask := uint8(1 << uint(n))
+	if _, err := f.h.read(b[:]); err != nil {
+		return gpio.Low
+	}
+	f.dvalue = b[0]
+	return f.dvalue&mask != 0
+}
+
+func (f *FT232R) syncBusOut(n int, l gpio.Level) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	mask := uint8(1 << uint(n))
+	if f.dmask&mask != 1 {
+		// Was input.
+		v := f.dmask | mask
+		if err := f.h.setBitMode(v, 4); err != nil {
+			return err
+		}
+		f.dmask = v
+	}
+	b := [1]byte{f.dvalue}
+	if _, err := f.h.write(b[:]); err != nil {
+		return err
+	}
+	f.dvalue = b[0]
+	// In synchronous mode, we must read after writing to flush the buffer.
+	if _, err := f.h.write(b[:]); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (f *FT232R) cBusFunc(n int) string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	fmask := uint8(0x10 << uint(n))
+	vmask := uint8(1 << uint(n))
+	if f.cbusnibble&fmask != 0 {
+		return "Out/" + gpio.Level(f.cbusnibble&vmask != 0).String()
+	}
+	return "In/" + f.cBusReadLocked(n).String()
+}
+
+func (f *FT232R) cBusIn(n int) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	fmask := uint8(0x10 << uint(n))
+	if f.cbusnibble&fmask == 0 {
+		// Already input.
+		return nil
+	}
+	v := f.cbusnibble &^ fmask
+	if err := f.h.setBitMode(v, 0x20); err != nil {
+		return err
+	}
+	f.cbusnibble = v
+	return nil
+}
+
+func (f *FT232R) cBusRead(n int) gpio.Level {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.cBusReadLocked(n)
+}
+
+func (f *FT232R) cBusReadLocked(n int) gpio.Level {
+	v, err := f.h.getBitMode()
+	if err != nil {
+		return gpio.Low
+	}
+	f.cbusnibble = v
+	vmask := uint8(1 << uint(n))
+	return f.cbusnibble&vmask != 0
+}
+
+func (f *FT232R) cBusOut(n int, l gpio.Level) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	fmask := uint8(0x10 << uint(n))
+	vmask := uint8(1 << uint(n))
+	v := f.cbusnibble | fmask
+	if l {
+		v |= vmask
+	} else {
+		v &^= vmask
+	}
+	if f.cbusnibble == v {
+		// Was already in the right mode.
+		return nil
+	}
+	if err := f.h.setBitMode(v, 0x20); err != nil {
+		return err
+	}
+	f.cbusnibble = v
+	return nil
 }
 
 //

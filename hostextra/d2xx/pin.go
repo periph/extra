@@ -18,7 +18,6 @@ import (
 // invalidPin implements gpio.PinIO.
 type invalidPin struct {
 	n   string
-	f   string
 	num int
 }
 
@@ -39,7 +38,7 @@ func (p *invalidPin) Number() int {
 
 // Function implements pin.Pin.
 func (p *invalidPin) Function() string {
-	return p.f
+	return "N/A"
 }
 
 // Halt implements gpio.PinIO.
