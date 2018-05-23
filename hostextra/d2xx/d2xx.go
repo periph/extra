@@ -57,9 +57,16 @@ func openDev(i int) (*device, error) {
 		return d, toErr("GetDeviceInfo", e)
 	}
 
-	// Under the hood, it calls both FT_GetDeviceInfo and FT_EEPROM_READ.
 	if e := h.d2xxEEPROMRead(d); e != 0 {
-		return nil, toErr("EEPROMRead", e)
+		// 15 == FT_EEPROM_NOT_PROGRAMMED
+		if e != 15 {
+			return nil, toErr("EEPROMRead", e)
+		}
+		// It's a fresh new device. Devices bought via Adafruit already have
+		// their EEPROM programmed with Adafruit branding but devices sold by
+		// CJMCU are not. Since d2xxGetDeviceInfo() above succeeded, we know the
+		// device type via the USB descriptor, which is sufficient to load the
+		// driver, which permits to program the EEPROM to "bootstrap" it.
 	}
 
 	if err := d.setupCommon(); err != nil {
