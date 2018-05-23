@@ -89,7 +89,7 @@ type device struct {
 	venID uint16
 	devID uint16
 
-	// eepromt is the raw content.
+	// eeprom is the raw content.
 	eeprom []byte
 	// These values come from the EEPROM.
 	manufacturer   string
@@ -483,7 +483,7 @@ type eepromFt232r struct {
 	PullDownEnable uint8   // Non zero if pull down in suspect enabled
 
 	// ft232r specific.
-	IsHighCurrent uint8 // High Drive I/Os
+	IsHighCurrent uint8 // High Drive I/Os; 3mA instead of 1mA (@3.3V)
 	UseExtOsc     uint8 // Use external oscillator
 	InvertTXD     uint8
 	InvertRXD     uint8
