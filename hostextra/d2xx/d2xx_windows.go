@@ -86,6 +86,43 @@ func (h handle) d2xxEEPROMRead(t devType, ee *eeprom) int {
 	return 0
 }
 
+func (h handle) d2xxEEPROMProgram(ee *eeprom) int {
+	var cmanu [64]byte
+	copy(cmanu[:], ee.manufacturer)
+	var cmanuID [64]byte
+	copy(cmanuID[:], ee.manufacturerID)
+	var cdesc [64]byte
+	copy(cdesc[:], ee.desc)
+	var cserial [64]byte
+	copy(cserial[:], ee.serial)
+	r1, _, _ := pEEPROMProgram.Call(h.toH(), uintptr(unsafe.Pointer(&ee.raw[0])), uintptr(len(ee.raw)), uintptr(unsafe.Pointer(&cmanu[0])), uintptr(unsafe.Pointer(&cmanuID[0])), uintptr(unsafe.Pointer(&cdesc[0])), uintptr(unsafe.Pointer(&cserial[0])))
+	return int(r1)
+}
+
+func (h handle) d2xxEEUASize() (int, int) {
+	var size uint32
+	if r1, _, _ := pEEUASize.Call(h.toH(), uintptr(unsafe.Pointer(&size))); r1 != 0 {
+		return 0, int(r1)
+	}
+	return int(size), 0
+}
+
+func (h handle) d2xxEEUARead(ua []byte) int {
+	var size uint32
+	if r1, _, _ := pEEUARead.Call(h.toH(), uintptr(unsafe.Pointer(&ua[0])), uintptr(len(ua)), uintptr(unsafe.Pointer(&size))); r1 != 0 {
+		return int(r1)
+	}
+	if int(size) != len(ua) {
+		return 6 // FT_INVALID_PARAMETER
+	}
+	return 0
+}
+
+func (h handle) d2xxEEUAWrite(ua []byte) int {
+	r1, _, _ := pEEUAWrite.Call(h.toH(), uintptr(unsafe.Pointer(&ua[0])), uintptr(len(ua)))
+	return int(r1)
+}
+
 func (h handle) d2xxSetChars(eventChar byte, eventEn bool, errorChar byte, errorEn bool) int {
 	v := uintptr(0)
 	if eventEn {
@@ -159,6 +196,10 @@ var (
 	pClose                *syscall.Proc
 	pCreateDeviceInfoList *syscall.Proc
 	pEEPROMRead           *syscall.Proc
+	pEEPROMProgram        *syscall.Proc
+	pEEUASize             *syscall.Proc
+	pEEUARead             *syscall.Proc
+	pEEUAWrite            *syscall.Proc
 	pGetBitMode           *syscall.Proc
 	pGetDeviceInfo        *syscall.Proc
 	pGetLibraryVersion    *syscall.Proc
@@ -189,6 +230,10 @@ func init() {
 		pClose = find("FT_Close")
 		pCreateDeviceInfoList = find("FT_CreateDeviceInfoList")
 		pEEPROMRead = find("FT_EEPROM_Read")
+		pEEPROMProgram = find("FT_EEPROM_Program")
+		pEEUASize = find("FT_EE_UASize")
+		pEEUARead = find("FT_EE_UARead")
+		pEEUAWrite = find("FT_EE_UAWrite")
 		pGetBitMode = find("FT_GetBitMode")
 		pGetDeviceInfo = find("FT_GetDeviceInfo")
 		pGetLibraryVersion = find("FT_GetLibraryVersion")

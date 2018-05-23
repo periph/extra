@@ -79,6 +79,12 @@ func process(d d2xx.Dev) {
 	}
 	log.Printf("  Full struct:\n%#v\n", i)
 
+	if ua, err := d.UserArea(); err != nil {
+		fmt.Printf("Failed to read UserArea: %v\n", err)
+	} else {
+		fmt.Printf("UserArea: %x\n", ua)
+	}
+
 	hdr := d.Header()
 	for _, p := range hdr {
 		fmt.Printf("%s: %s\n", p, p.Function())

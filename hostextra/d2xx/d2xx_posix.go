@@ -96,6 +96,59 @@ func (h handle) d2xxEEPROMRead(t devType, ee *eeprom) int {
 	return 0
 }
 
+func (h handle) d2xxEEPROMProgram(ee *eeprom) int {
+	// len(manufacturer) + len(desc) <= 40.
+	/*
+		var cmanu [64]byte
+		copy(cmanu[:], ee.manufacturer)
+		var cmanuID [64]byte
+		copy(cmanuID[:], ee.manufacturerID)
+		var cdesc [64]byte
+		copy(cdesc[:], ee.desc)
+		var cserial [64]byte
+		copy(cserial[:], ee.serial)
+	*/
+	cmanu := C.CString(ee.manufacturer)
+	defer C.free(unsafe.Pointer(cmanu))
+	cmanuID := C.CString(ee.manufacturerID)
+	defer C.free(unsafe.Pointer(cmanuID))
+	cdesc := C.CString(ee.desc)
+	defer C.free(unsafe.Pointer(cdesc))
+	cserial := C.CString(ee.serial)
+	defer C.free(unsafe.Pointer(cserial))
+
+	if e := C.FT_EEPROM_Program(h.toH(), unsafe.Pointer(&ee.raw[0]), C.DWORD(len(ee.raw)), cmanu, cmanuID, cdesc, cserial); e != 0 {
+		return int(e)
+	}
+	return 0
+}
+
+func (h handle) d2xxEEUASize() (int, int) {
+	var size C.DWORD
+	if e := C.FT_EE_UASize(h.toH(), &size); e != 0 {
+		return 0, int(e)
+	}
+	return int(size), 0
+}
+
+func (h handle) d2xxEEUARead(ua []byte) int {
+	var size C.DWORD
+	if e := C.FT_EE_UARead(h.toH(), (*C.UCHAR)(unsafe.Pointer(&ua[0])), C.DWORD(len(ua)), &size); e != 0 {
+		return int(e)
+	}
+	if int(size) != len(ua) {
+		return 6 // FT_INVALID_PARAMETER
+	}
+	return 0
+}
+
+func (h handle) d2xxEEUAWrite(ua []byte) int {
+	if e := C.FT_EE_UAWrite(h.toH(), (*C.UCHAR)(&ua[0]), C.DWORD(len(ua))); e != 0 {
+		return int(e)
+	}
+	return 0
+}
+
 func (h handle) d2xxSetChars(eventChar byte, eventEn bool, errorChar byte, errorEn bool) int {
 	v := C.UCHAR(0)
 	if eventEn {

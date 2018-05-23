@@ -182,6 +182,8 @@ type Dev interface {
 
 	// GetInfo returns information about an opened device.
 	GetInfo(i *Info)
+	// UserArea is the EEPROM part that can be used to stored user defined values.
+	UserArea() ([]byte, error)
 	// Header returns the GPIO pins exposed on the chip.
 	Header() []gpio.PinIO
 }
@@ -207,6 +209,10 @@ func (b *broken) Halt() error {
 func (b *broken) GetInfo(i *Info) {
 	i.Opened = false
 	i.Type = b.err.Error()
+}
+
+func (b *broken) UserArea() ([]byte, error) {
+	return nil, b.err
 }
 
 func (b *broken) Header() []gpio.PinIO {
@@ -237,6 +243,10 @@ func (f *generic) Halt() error {
 // GetInfo returns information about an opened device.
 func (f *generic) GetInfo(i *Info) {
 	i.fromEEPROM(f.h, &f.ee)
+}
+
+func (f *generic) UserArea() ([]byte, error) {
+	return f.h.readUA()
 }
 
 // Header returns the GPIO pins exposed on the chip.

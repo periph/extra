@@ -41,6 +41,22 @@ func (h handle) d2xxEEPROMRead(t devType, ee *eeprom) int {
 	return noCGO
 }
 
+func (h handle) d2xxEEPROMProgram(e *eeprom) int {
+	return noCGO
+}
+
+func (h handle) d2xxEEUASize() (int, int) {
+	return 0, noCGO
+}
+
+func (h handle) d2xxEEUARead(ua []byte) int {
+	return noCGO
+}
+
+func (h handle) d2xxEEUAWrite(ua []byte) int {
+	return noCGO
+}
+
 func (h handle) d2xxSetChars(eventChar byte, eventEn bool, errorChar byte, errorEn bool) int {
 	return noCGO
 }

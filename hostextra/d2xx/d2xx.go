@@ -211,6 +211,22 @@ func (d *device) write(b []byte) (int, error) {
 	return n, toErr("Write", e)
 }
 
+func (d *device) readUA() ([]byte, error) {
+	size, e := d.h.d2xxEEUASize()
+	if e != 0 {
+		return nil, toErr("EEUASize", e)
+	}
+	if size == 0 {
+		// Happens on uninitialized EEPROM.
+		return nil, nil
+	}
+	b := make([]byte, size)
+	if e := d.h.d2xxEEUARead(b); e != 0 {
+		return nil, toErr("EEUARead", e)
+	}
+	return b, nil
+}
+
 // devType is the FTDI device type.
 type devType uint32
 
@@ -476,6 +492,10 @@ type d2xxHandle interface {
 	d2xxResetDevice() int
 	d2xxGetDeviceInfo() (devType, uint16, uint16, int)
 	d2xxEEPROMRead(d devType, e *eeprom) int
+	d2xxEEPROMProgram(e *eeprom) int
+	d2xxEEUASize() (int, int)
+	d2xxEEUARead(ua []byte) int
+	d2xxEEUAWrite(ua []byte) int
 	d2xxSetChars(eventChar byte, eventEn bool, errorChar byte, errorEn bool) int
 	d2xxSetUSBParameters(in, out int) int
 	d2xxSetFlowControl() int
