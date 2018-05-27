@@ -472,6 +472,11 @@ func (g *gpioMPSSE) Function() string {
 	return s + gpio.Level(g.a.value&m != 0).String()
 }
 
+// Halt implements gpio.PinIO.
+func (g *gpioMPSSE) Halt() error {
+	return nil
+}
+
 // In implements gpio.PinIn.
 func (g *gpioMPSSE) In(pull gpio.Pull, e gpio.Edge) error {
 	if e != gpio.NoEdge {

@@ -42,6 +42,11 @@ func (p *invalidPin) Function() string {
 	return p.f
 }
 
+// Halt implements gpio.PinIO.
+func (p *invalidPin) Halt() error {
+	return nil
+}
+
 // In implements gpio.PinIn.
 func (p *invalidPin) In(pull gpio.Pull, e gpio.Edge) error {
 	return errors.New("d2xx: to be implemented")

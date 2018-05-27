@@ -101,8 +101,10 @@ type Info struct {
 // either cast into the right hardware, but more simply use the i2creg / spireg
 // bus/port registries.
 type Dev interface {
+	// conn.Resource
 	String() string
-	conn.Resource
+	Halt() error
+
 	// GetInfo returns information about an opened device.
 	GetInfo(i *Info)
 	// Header returns the GPIO pins exposed on the chip.
