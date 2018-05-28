@@ -184,6 +184,8 @@ type Dev interface {
 	GetInfo(i *Info)
 	// UserArea is the EEPROM part that can be used to stored user defined values.
 	UserArea() ([]byte, error)
+	// WriteUserArea updates the user area EEPROM.
+	WriteUserArea(ua []byte) error
 	// Header returns the GPIO pins exposed on the chip.
 	Header() []gpio.PinIO
 }
@@ -213,6 +215,10 @@ func (b *broken) GetInfo(i *Info) {
 
 func (b *broken) UserArea() ([]byte, error) {
 	return nil, b.err
+}
+
+func (b *broken) WriteUserArea(ua []byte) error {
+	return b.err
 }
 
 func (b *broken) Header() []gpio.PinIO {
@@ -247,6 +253,10 @@ func (f *generic) GetInfo(i *Info) {
 
 func (f *generic) UserArea() ([]byte, error) {
 	return f.h.readUA()
+}
+
+func (f *generic) WriteUserArea(ua []byte) error {
+	return f.h.writeUA(ua)
 }
 
 // Header returns the GPIO pins exposed on the chip.

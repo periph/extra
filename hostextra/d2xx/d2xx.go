@@ -25,6 +25,7 @@ package d2xx
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 )
 
@@ -225,6 +226,28 @@ func (d *device) readUA() ([]byte, error) {
 		return nil, toErr("EEUARead", e)
 	}
 	return b, nil
+}
+
+func (d *device) writeUA(ua []byte) error {
+	size, e := d.h.d2xxEEUASize()
+	if e != 0 {
+		return toErr("EEUASize", e)
+	}
+	if size == 0 {
+		return errors.New("d2xx: please program EEPROM first")
+	}
+	if size < len(ua) {
+		return fmt.Errorf("d2xx: maximum user area size is %d bytes", size)
+	}
+	if size != len(ua) {
+		b := make([]byte, size)
+		copy(b, ua)
+		ua = b
+	}
+	if e := d.h.d2xxEEUAWrite(ua); e != 0 {
+		return toErr("EEUAWrite", e)
+	}
+	return nil
 }
 
 // devType is the FTDI device type.
