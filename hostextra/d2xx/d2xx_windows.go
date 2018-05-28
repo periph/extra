@@ -55,7 +55,7 @@ func (h handle) d2xxGetDeviceInfo() (devType, uint16, uint16, int) {
 	return devType(d), uint16(id >> 16), uint16(id), 0
 }
 
-func (h handle) d2xxEEPROMRead(d *device) int {
+func (h handle) d2xxEEPROMRead(t devType, ee *eeprom) int {
 	var manufacturer [64]byte
 	var manufacturerID [64]byte
 	var desc [64]byte
@@ -66,19 +66,23 @@ func (h handle) d2xxEEPROMRead(d *device) int {
 	de := uintptr(unsafe.Pointer(&desc[0]))
 	s := uintptr(unsafe.Pointer(&serial[0]))
 
-	d.eeprom = make([]byte, d.t.eepromSize())
-	eepromVoid := unsafe.Pointer(&d.eeprom[0])
+	if l := t.eepromSize(); len(ee.raw) < l {
+		ee.raw = make([]byte, t.eepromSize())
+	} else if len(ee.raw) > l {
+		ee.raw = ee.raw[:l]
+	}
+	eepromVoid := unsafe.Pointer(&ee.raw[0])
 	hdr := (*eepromHeader)(eepromVoid)
 	// It MUST be set here. This is not always the case on posix.
-	hdr.deviceType = d.t
-	if r1, _, _ := pEEPROMRead.Call(h.toH(), uintptr(eepromVoid), uintptr(len(d.eeprom)), m, mi, de, s); r1 != 0 {
+	hdr.deviceType = t
+	if r1, _, _ := pEEPROMRead.Call(h.toH(), uintptr(eepromVoid), uintptr(len(ee.raw)), m, mi, de, s); r1 != 0 {
 		return int(r1)
 	}
 
-	d.manufacturer = toStr(manufacturer[:])
-	d.manufacturerID = toStr(manufacturerID[:])
-	d.desc = toStr(desc[:])
-	d.serial = toStr(serial[:])
+	ee.manufacturer = toStr(manufacturer[:])
+	ee.manufacturerID = toStr(manufacturerID[:])
+	ee.desc = toStr(desc[:])
+	ee.serial = toStr(serial[:])
 	return 0
 }
 

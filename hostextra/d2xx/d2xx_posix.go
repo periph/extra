@@ -8,6 +8,7 @@ package d2xx
 
 /*
 #include "ftd2xx.h"
+#include <stdlib.h>
 */
 import "C"
 import (
@@ -58,13 +59,17 @@ func (h handle) d2xxGetDeviceInfo() (devType, uint16, uint16, int) {
 	return devType(dev), uint16(id >> 16), uint16(id), 0
 }
 
-func (h handle) d2xxEEPROMRead(d *device) int {
+func (h handle) d2xxEEPROMRead(t devType, ee *eeprom) int {
 	var manufacturer [64]C.char
 	var manufacturerID [64]C.char
 	var desc [64]C.char
 	var serial [64]C.char
-	d.eeprom = make([]byte, d.t.eepromSize())
-	eepromVoid := unsafe.Pointer(&d.eeprom[0])
+	if l := t.eepromSize(); len(ee.raw) < l {
+		ee.raw = make([]byte, t.eepromSize())
+	} else if len(ee.raw) > l {
+		ee.raw = ee.raw[:l]
+	}
+	eepromVoid := unsafe.Pointer(&ee.raw[0])
 	hdr := (*eepromHeader)(eepromVoid)
 
 	// There something odd going on here.
@@ -72,22 +77,22 @@ func (h handle) d2xxEEPROMRead(d *device) int {
 	// On a ft232h, we observed that hdr.deviceType MUST NOT be set, but on a
 	// ft232r, it MUST be set. Since we can't know in advance what we must use,
 	// just try both. ¯\_(ツ)_/¯
-	hdr.deviceType = d.t
-	if e := C.FT_EEPROM_Read(h.toH(), eepromVoid, C.DWORD(len(d.eeprom)), &manufacturer[0], &manufacturerID[0], &desc[0], &serial[0]); e != 0 {
+	hdr.deviceType = t
+	if e := C.FT_EEPROM_Read(h.toH(), eepromVoid, C.DWORD(len(ee.raw)), &manufacturer[0], &manufacturerID[0], &desc[0], &serial[0]); e != 0 {
 		// FT_INVALID_PARAMETER
 		if e == 6 {
 			hdr.deviceType = 0
-			e = C.FT_EEPROM_Read(h.toH(), eepromVoid, C.DWORD(len(d.eeprom)), &manufacturer[0], &manufacturerID[0], &desc[0], &serial[0])
+			e = C.FT_EEPROM_Read(h.toH(), eepromVoid, C.DWORD(len(ee.raw)), &manufacturer[0], &manufacturerID[0], &desc[0], &serial[0])
 		}
 		if e != 0 {
 			return int(e)
 		}
 	}
 
-	d.manufacturer = C.GoString(&manufacturer[0])
-	d.manufacturerID = C.GoString(&manufacturerID[0])
-	d.desc = C.GoString(&desc[0])
-	d.serial = C.GoString(&serial[0])
+	ee.manufacturer = C.GoString(&manufacturer[0])
+	ee.manufacturerID = C.GoString(&manufacturerID[0])
+	ee.desc = C.GoString(&desc[0])
+	ee.serial = C.GoString(&serial[0])
 	return 0
 }
 

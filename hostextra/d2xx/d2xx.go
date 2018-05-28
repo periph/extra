@@ -26,7 +26,6 @@ package d2xx
 import (
 	"errors"
 	"strconv"
-	"unsafe"
 )
 
 // Version returns the version number of the D2xx driver currently used.
@@ -56,11 +55,33 @@ func openDev(i int) (*device, error) {
 	if d.t, d.venID, d.devID, e = h.d2xxGetDeviceInfo(); e != 0 {
 		return d, toErr("GetDeviceInfo", e)
 	}
+	return d, nil
+}
 
-	if e := h.d2xxEEPROMRead(d); e != 0 {
+// device is the lower level d2xx device handle, just above 'handle' which
+// directly maps to D2XX function calls.
+//
+// device converts the int error type into Go native error and handles higher
+// level functionality like reading and writing to the USB connection.
+//
+// The content of the struct is immutable after initialization.
+type device struct {
+	h     handle
+	t     devType
+	venID uint16
+	devID uint16
+}
+
+func (d *device) closeDev() error {
+	// Not yet called.
+	return toErr("Close", d.h.d2xxClose())
+}
+
+func (d *device) initialize(ee *eeprom) error {
+	if e := d.h.d2xxEEPROMRead(d.t, ee); e != 0 {
 		// 15 == FT_EEPROM_NOT_PROGRAMMED
 		if e != 15 {
-			return nil, toErr("EEPROMRead", e)
+			return toErr("EEPROMRead", e)
 		}
 		// It's a fresh new device. Devices bought via Adafruit already have
 		// their EEPROM programmed with Adafruit branding but devices sold by
@@ -70,118 +91,21 @@ func openDev(i int) (*device, error) {
 	}
 
 	if err := d.setupCommon(); err != nil {
-		return nil, err
+		return err
 	}
 	switch d.t {
 	case ft232H, ft2232H, ft4232H: // ft2232
 		if err := d.setupMPSSE(); err != nil {
-			return nil, err
+			return err
 		}
 	case ft232R:
 		// Asynchronous bitbang
 		if err := d.setBitMode(0, 1); err != nil {
-			return nil, err
+			return err
 		}
 	default:
 	}
-	return d, nil
-}
-
-// device is the low level d2xx device handle.
-//
-// The content of the struct is immutable after initialization.
-type device struct {
-	h     handle
-	t     devType
-	venID uint16
-	devID uint16
-
-	// eeprom is the raw content.
-	eeprom []byte
-	// These values come from the EEPROM.
-	manufacturer   string
-	manufacturerID string
-	desc           string
-	serial         string
-}
-
-func (d *device) closeDev() error {
-	// Not yet called.
-	return toErr("Close", d.h.d2xxClose())
-}
-
-func (d *device) getI(i *Info) {
-	i.Type = d.t.String()
-	i.VenID = d.venID
-	i.DevID = d.devID
-	i.Manufacturer = d.manufacturer
-	i.ManufacturerID = d.manufacturerID
-	i.Desc = d.desc
-	i.Serial = d.serial
-	if len(d.eeprom) > 0 {
-		// Only consider the device "good" if we could read the EEPROM.
-		i.Opened = true
-		i.EEPROM = make([]byte, len(d.eeprom))
-		copy(i.EEPROM, d.eeprom)
-
-		// Use the custom structs instead of the ones provided by the library. The
-		// reason is that it had to be written for Windows anyway, and this enables
-		// using a single code path everywhere.
-		hdr := (*eepromHeader)(unsafe.Pointer(&d.eeprom[0]))
-		i.MaxPower = uint16(hdr.MaxPower)
-		i.SelfPowered = hdr.SelfPowered != 0
-		i.RemoteWakeup = hdr.RemoteWakeup != 0
-		i.PullDownEnable = hdr.PullDownEnable != 0
-		switch d.t {
-		case ft232H:
-			h := (*eepromFt232h)(unsafe.Pointer(&d.eeprom[0]))
-			i.CSlowSlew = h.ACSlowSlew != 0
-			i.CSchmittInput = h.ACSchmittInput != 0
-			i.CDriveCurrent = uint8(h.ACDriveCurrent)
-			i.DSlowSlew = h.ADSlowSlew != 0
-			i.DSchmittInput = h.ADSchmittInput != 0
-			i.DDriveCurrent = uint8(h.ADDriveCurrent)
-			i.Cbus0 = uint8(h.Cbus0)
-			i.Cbus1 = uint8(h.Cbus1)
-			i.Cbus2 = uint8(h.Cbus2)
-			i.Cbus3 = uint8(h.Cbus3)
-			i.Cbus4 = uint8(h.Cbus4)
-			i.Cbus5 = uint8(h.Cbus5)
-			i.Cbus6 = uint8(h.Cbus6)
-			i.Cbus7 = uint8(h.Cbus7)
-			i.Cbus8 = uint8(h.Cbus8)
-			i.Cbus9 = uint8(h.Cbus9)
-			i.FT1248Cpol = h.FT1248Cpol != 0
-			i.FT1248Lsb = h.FT1248Lsb != 0
-			i.FT1248FlowControl = h.FT1248FlowControl != 0
-			i.IsFifo = h.IsFifo != 0
-			i.IsFifoTar = h.IsFifoTar != 0
-			i.IsFastSer = h.IsFastSer != 0
-			i.IsFT1248 = h.IsFT1248 != 0
-			i.PowerSaveEnable = h.PowerSaveEnable != 0
-			i.DriverType = uint8(h.DriverType)
-		case ft232R:
-			h := (*eepromFt232r)(unsafe.Pointer(&d.eeprom[0]))
-			i.IsHighCurrent = h.IsHighCurrent != 0
-			i.UseExtOsc = h.UseExtOsc != 0
-			i.InvertTXD = h.InvertTXD != 0
-			i.InvertRXD = h.InvertRXD != 0
-			i.InvertRTS = h.InvertRTS != 0
-			i.InvertCTS = h.InvertCTS != 0
-			i.InvertDTR = h.InvertDTR != 0
-			i.InvertDSR = h.InvertDSR != 0
-			i.InvertDCD = h.InvertDCD != 0
-			i.InvertRI = h.InvertRI != 0
-			i.Cbus0 = uint8(h.Cbus0)
-			i.Cbus1 = uint8(h.Cbus1)
-			i.Cbus2 = uint8(h.Cbus2)
-			i.Cbus3 = uint8(h.Cbus3)
-			i.Cbus4 = uint8(h.Cbus4)
-			i.DriverType = uint8(h.DriverType)
-		default:
-			// TODO(maruel): Implement me!
-		}
-	}
+	return nil
 }
 
 // setupCommon is the general setup for common devices.
@@ -358,40 +282,6 @@ func (d devType) eepromSize() int {
 	}
 }
 
-// TODO(maruel): To add:
-// - FT_IoCtl
-// UART:
-// - FT_SetBaudRate
-// - FT_SetDivisor
-// - FT_SetDataCharacteristics
-// - FT_SetFlowControl
-// - FT_SetDtr / FT_ClrDtr / FT_SetRts / FT_ClrRts / FT_SetBreakOn FT_SetBreakOff
-// - FT_SetTimeouts / FT_GetQueueStatus / FT_SetEventNotification / FT_GetStatus
-// - FT_SetWaitMask / FT_WaitOnMask
-// - FT_GetEventStatus
-// - FT_GetModemStatus / FT_SetChars / FT_Purge
-// EEPROM:
-// - FT_ReadEE
-// - FT_EE_Read / FT_EE_ReadEx
-// - FT_WriteEE
-// - FT_EraseEE
-// - FT_EEPROM_Program
-// - FT_EE_Program / FT_EE_ProgramEx
-// - FT_EE_UASize / FT_EE_UAWrite / FT_EE_UARead
-// - FT_PROGRAM_DATA
-// EEPROM FT232H:
-// - FT_EE_ReadConfig / FT_EE_WriteConfig
-// - FT_EE_ReadECC
-// - FT_GetQueueStatusEx
-// - FT_ComPortIdle / FT_ComPortCancelIdle
-// - FT_VendorCmdGet / FT_VendorCmdSet / FT_VendorCmdGetEx / FT_VendorCmdSetEx
-// USB:
-// - FT_SetLatencyTimer / FT_GetLatencyTimer
-// - FT_SetUSBParameters / FT_SetDeadmanTimeout
-// - FT_SetVIDPID / FT_GetVIDPID
-// - FT_StopInTask / FT_RestartInTask
-// - FT_SetResetPipeRetryCount / FT_ResetPort / FT_CyclePort
-
 const missing = -1
 const noCGO = -2
 
@@ -424,6 +314,23 @@ const (
 	ft232HCBusClk15    = 0x0B // 15MHz clock
 	ft232HCBusClk7dot5 = 0x0C // 7.5MHz clock
 )
+
+// eeprom contains the EEPROM content.
+//
+// The EEPROM is in 3 parts: the 56 bytes header, the 4 strings and the rest
+// which is used as an 'user area'. The size of the user area depends on the
+// length of the strings. Its content is not included in this struct.
+type eeprom struct {
+	// raw is the raw EEPROM content. It is normally around 56 bytes and excludes
+	// the strings.
+	raw []byte
+
+	// The following condition must be true: len(manufacturer) + len(desc) <= 40.
+	manufacturer   string
+	manufacturerID string
+	desc           string
+	serial         string
+}
 
 // eepromHeader is FT_EEPROM_HEADER.
 type eepromHeader struct {
@@ -568,7 +475,7 @@ type d2xxHandle interface {
 	d2xxClose() int
 	d2xxResetDevice() int
 	d2xxGetDeviceInfo() (devType, uint16, uint16, int)
-	d2xxEEPROMRead(d *device) int
+	d2xxEEPROMRead(d devType, e *eeprom) int
 	d2xxSetChars(eventChar byte, eventEn bool, errorChar byte, errorEn bool) int
 	d2xxSetUSBParameters(in, out int) int
 	d2xxSetFlowControl() int

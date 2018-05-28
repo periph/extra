@@ -8,6 +8,7 @@ import (
 	"errors"
 	"strconv"
 	"sync"
+	"unsafe"
 
 	"periph.io/x/periph/conn"
 	"periph.io/x/periph/conn/gpio"
@@ -93,6 +94,80 @@ type Info struct {
 	EEPROM []byte
 }
 
+func (i *Info) fromEEPROM(d *device, ee *eeprom) {
+	i.Type = d.t.String()
+	i.VenID = d.venID
+	i.DevID = d.devID
+	i.Manufacturer = ee.manufacturer
+	i.ManufacturerID = ee.manufacturerID
+	i.Desc = ee.desc
+	i.Serial = ee.serial
+	if len(ee.raw) > 0 {
+		// Only consider the device "good" if we could read the EEPROM.
+		i.Opened = true
+		i.EEPROM = make([]byte, len(ee.raw))
+		copy(i.EEPROM, ee.raw)
+
+		// Use the custom structs instead of the ones provided by the library. The
+		// reason is that it had to be written for Windows anyway, and this enables
+		// using a single code path everywhere.
+		hdr := (*eepromHeader)(unsafe.Pointer(&ee.raw[0]))
+		i.MaxPower = uint16(hdr.MaxPower)
+		i.SelfPowered = hdr.SelfPowered != 0
+		i.RemoteWakeup = hdr.RemoteWakeup != 0
+		i.PullDownEnable = hdr.PullDownEnable != 0
+		switch d.t {
+		case ft232H:
+			h := (*eepromFt232h)(unsafe.Pointer(&ee.raw[0]))
+			i.CSlowSlew = h.ACSlowSlew != 0
+			i.CSchmittInput = h.ACSchmittInput != 0
+			i.CDriveCurrent = uint8(h.ACDriveCurrent)
+			i.DSlowSlew = h.ADSlowSlew != 0
+			i.DSchmittInput = h.ADSchmittInput != 0
+			i.DDriveCurrent = uint8(h.ADDriveCurrent)
+			i.Cbus0 = uint8(h.Cbus0)
+			i.Cbus1 = uint8(h.Cbus1)
+			i.Cbus2 = uint8(h.Cbus2)
+			i.Cbus3 = uint8(h.Cbus3)
+			i.Cbus4 = uint8(h.Cbus4)
+			i.Cbus5 = uint8(h.Cbus5)
+			i.Cbus6 = uint8(h.Cbus6)
+			i.Cbus7 = uint8(h.Cbus7)
+			i.Cbus8 = uint8(h.Cbus8)
+			i.Cbus9 = uint8(h.Cbus9)
+			i.FT1248Cpol = h.FT1248Cpol != 0
+			i.FT1248Lsb = h.FT1248Lsb != 0
+			i.FT1248FlowControl = h.FT1248FlowControl != 0
+			i.IsFifo = h.IsFifo != 0
+			i.IsFifoTar = h.IsFifoTar != 0
+			i.IsFastSer = h.IsFastSer != 0
+			i.IsFT1248 = h.IsFT1248 != 0
+			i.PowerSaveEnable = h.PowerSaveEnable != 0
+			i.DriverType = uint8(h.DriverType)
+		case ft232R:
+			h := (*eepromFt232r)(unsafe.Pointer(&ee.raw[0]))
+			i.IsHighCurrent = h.IsHighCurrent != 0
+			i.UseExtOsc = h.UseExtOsc != 0
+			i.InvertTXD = h.InvertTXD != 0
+			i.InvertRXD = h.InvertRXD != 0
+			i.InvertRTS = h.InvertRTS != 0
+			i.InvertCTS = h.InvertCTS != 0
+			i.InvertDTR = h.InvertDTR != 0
+			i.InvertDSR = h.InvertDSR != 0
+			i.InvertDCD = h.InvertDCD != 0
+			i.InvertRI = h.InvertRI != 0
+			i.Cbus0 = uint8(h.Cbus0)
+			i.Cbus1 = uint8(h.Cbus1)
+			i.Cbus2 = uint8(h.Cbus2)
+			i.Cbus3 = uint8(h.Cbus3)
+			i.Cbus4 = uint8(h.Cbus4)
+			i.DriverType = uint8(h.DriverType)
+		default:
+			// TODO(maruel): Implement me!
+		}
+	}
+}
+
 // Dev represents one FTDI device.
 //
 // There can be multiple FTDI devices connected to a host.
@@ -145,7 +220,7 @@ type generic struct {
 	// Immutable after initialization.
 	index int
 	h     *device // it may be nil if the device couldn't be opened.
-	info  Info
+	ee    eeprom
 }
 
 func (f *generic) String() string {
@@ -161,7 +236,7 @@ func (f *generic) Halt() error {
 
 // GetInfo returns information about an opened device.
 func (f *generic) GetInfo(i *Info) {
-	*i = f.info
+	i.fromEEPROM(f.h, &f.ee)
 }
 
 // Header returns the GPIO pins exposed on the chip.
@@ -169,11 +244,12 @@ func (f *generic) Header() []gpio.PinIO {
 	return nil
 }
 
+func (f *generic) initialize() error {
+	return f.h.initialize(&f.ee)
+}
+
 func (f *generic) typeName() string {
-	if f.info.Type != "" {
-		return f.info.Type
-	}
-	return "ftdi_unknown"
+	return f.h.t.String()
 }
 
 //

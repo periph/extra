@@ -39,11 +39,13 @@ func open(i int) (Dev, error) {
 		return nil, err
 	}
 	g := generic{index: i, h: h}
-	h.getI(&g.info)
-	switch g.info.Type {
-	case "ft232h":
+	if err := g.initialize(); err != nil {
+		return nil, err
+	}
+	switch g.h.t {
+	case ft232H:
 		return newFT232H(g), nil
-	case "ft232r":
+	case ft232R:
 		return newFT232R(g), nil
 	default:
 		return &g, nil
