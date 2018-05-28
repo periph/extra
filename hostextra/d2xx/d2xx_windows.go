@@ -55,7 +55,7 @@ func (h handle) d2xxGetDeviceInfo() (devType, uint16, uint16, int) {
 	return devType(d), uint16(id >> 16), uint16(id), 0
 }
 
-func (h handle) d2xxEEPROMRead(t devType, ee *eeprom) int {
+func (h handle) d2xxEEPROMRead(t devType, ee *EEPROM) int {
 	var manufacturer [64]byte
 	var manufacturerID [64]byte
 	var desc [64]byte
@@ -66,36 +66,36 @@ func (h handle) d2xxEEPROMRead(t devType, ee *eeprom) int {
 	de := uintptr(unsafe.Pointer(&desc[0]))
 	s := uintptr(unsafe.Pointer(&serial[0]))
 
-	if l := t.eepromSize(); len(ee.raw) < l {
-		ee.raw = make([]byte, t.eepromSize())
-	} else if len(ee.raw) > l {
-		ee.raw = ee.raw[:l]
+	if l := t.eepromSize(); len(ee.Raw) < l {
+		ee.Raw = make([]byte, t.eepromSize())
+	} else if len(ee.Raw) > l {
+		ee.Raw = ee.Raw[:l]
 	}
-	eepromVoid := unsafe.Pointer(&ee.raw[0])
+	eepromVoid := unsafe.Pointer(&ee.Raw[0])
 	hdr := (*eepromHeader)(eepromVoid)
 	// It MUST be set here. This is not always the case on posix.
 	hdr.deviceType = t
-	if r1, _, _ := pEEPROMRead.Call(h.toH(), uintptr(eepromVoid), uintptr(len(ee.raw)), m, mi, de, s); r1 != 0 {
+	if r1, _, _ := pEEPROMRead.Call(h.toH(), uintptr(eepromVoid), uintptr(len(ee.Raw)), m, mi, de, s); r1 != 0 {
 		return int(r1)
 	}
 
-	ee.manufacturer = toStr(manufacturer[:])
-	ee.manufacturerID = toStr(manufacturerID[:])
-	ee.desc = toStr(desc[:])
-	ee.serial = toStr(serial[:])
+	ee.Manufacturer = toStr(manufacturer[:])
+	ee.ManufacturerID = toStr(manufacturerID[:])
+	ee.Desc = toStr(desc[:])
+	ee.Serial = toStr(serial[:])
 	return 0
 }
 
-func (h handle) d2xxEEPROMProgram(ee *eeprom) int {
+func (h handle) d2xxEEPROMProgram(ee *EEPROM) int {
 	var cmanu [64]byte
-	copy(cmanu[:], ee.manufacturer)
+	copy(cmanu[:], ee.Manufacturer)
 	var cmanuID [64]byte
-	copy(cmanuID[:], ee.manufacturerID)
+	copy(cmanuID[:], ee.ManufacturerID)
 	var cdesc [64]byte
-	copy(cdesc[:], ee.desc)
+	copy(cdesc[:], ee.Desc)
 	var cserial [64]byte
-	copy(cserial[:], ee.serial)
-	r1, _, _ := pEEPROMProgram.Call(h.toH(), uintptr(unsafe.Pointer(&ee.raw[0])), uintptr(len(ee.raw)), uintptr(unsafe.Pointer(&cmanu[0])), uintptr(unsafe.Pointer(&cmanuID[0])), uintptr(unsafe.Pointer(&cdesc[0])), uintptr(unsafe.Pointer(&cserial[0])))
+	copy(cserial[:], ee.Serial)
+	r1, _, _ := pEEPROMProgram.Call(h.toH(), uintptr(unsafe.Pointer(&ee.Raw[0])), uintptr(len(ee.Raw)), uintptr(unsafe.Pointer(&cmanu[0])), uintptr(unsafe.Pointer(&cmanuID[0])), uintptr(unsafe.Pointer(&cdesc[0])), uintptr(unsafe.Pointer(&cserial[0])))
 	return int(r1)
 }
 

@@ -38,7 +38,8 @@ func open(i int) (Dev, error) {
 	if err != nil {
 		return nil, err
 	}
-	g := generic{index: i, h: h}
+	// Make a copy of the handle.
+	g := generic{index: i, h: *h}
 	if err := g.initialize(); err != nil {
 		return nil, err
 	}

@@ -37,11 +37,11 @@ func (h handle) d2xxGetDeviceInfo() (devType, uint16, uint16, int) {
 	return unknown, 0, 0, noCGO
 }
 
-func (h handle) d2xxEEPROMRead(t devType, ee *eeprom) int {
+func (h handle) d2xxEEPROMRead(t devType, ee *EEPROM) int {
 	return noCGO
 }
 
-func (h handle) d2xxEEPROMProgram(e *eeprom) int {
+func (h handle) d2xxEEPROMProgram(e *EEPROM) int {
 	return noCGO
 }
 

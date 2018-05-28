@@ -21,7 +21,16 @@ import (
 )
 
 func writeEEPROM(d d2xx.Dev, manufacturer, manufacturerID, desc, serial string) error {
-	return errors.New("not implemented yet")
+	ee := d2xx.EEPROM{}
+	if err := d.EEPROM(&ee); err != nil {
+		fmt.Printf("Failed to read EEPROM: %v\n", err)
+	}
+	ee.Manufacturer = manufacturer
+	ee.ManufacturerID = manufacturerID
+	ee.Desc = desc
+	ee.Serial = serial
+	log.Printf("Writing: %x", ee.Raw)
+	return d.WriteEEPROM(&ee)
 }
 
 func mainImpl() error {
@@ -43,7 +52,7 @@ func mainImpl() error {
 	}
 	if *ua == "" {
 		if *manufacturer == "" || *manufacturerID == "" || *desc == "" || *serial == "" {
-			return errors.New("all of -m, -mid, -d and -s are required")
+			return errors.New("all of -m, -mid, -d and -s are required, or use -ua")
 		}
 	} else {
 		if *manufacturer != "" || *manufacturerID != "" || *desc != "" || *serial != "" {

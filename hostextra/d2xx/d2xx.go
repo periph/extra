@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"unsafe"
 )
 
 // Version returns the version number of the D2xx driver currently used.
@@ -47,7 +48,6 @@ func numDevices() (int, error) {
 //
 
 func openDev(i int) (*device, error) {
-	// TODO(maruel): The handle is leaked in failure paths.
 	h, e := d2xxOpen(i)
 	d := &device{h: h}
 	if e != 0 {
@@ -78,19 +78,7 @@ func (d *device) closeDev() error {
 	return toErr("Close", d.h.d2xxClose())
 }
 
-func (d *device) initialize(ee *eeprom) error {
-	if e := d.h.d2xxEEPROMRead(d.t, ee); e != 0 {
-		// 15 == FT_EEPROM_NOT_PROGRAMMED
-		if e != 15 {
-			return toErr("EEPROMRead", e)
-		}
-		// It's a fresh new device. Devices bought via Adafruit already have
-		// their EEPROM programmed with Adafruit branding but devices sold by
-		// CJMCU are not. Since d2xxGetDeviceInfo() above succeeded, we know the
-		// device type via the USB descriptor, which is sufficient to load the
-		// driver, which permits to program the EEPROM to "bootstrap" it.
-	}
-
+func (d *device) initialize() error {
 	if err := d.setupCommon(); err != nil {
 		return err
 	}
@@ -212,6 +200,61 @@ func (d *device) write(b []byte) (int, error) {
 	return n, toErr("Write", e)
 }
 
+func (d *device) readEEPROM(ee *EEPROM) error {
+	if e := d.h.d2xxEEPROMRead(d.t, ee); e != 0 {
+		// 15 == FT_EEPROM_NOT_PROGRAMMED
+		if e != 15 {
+			return toErr("EEPROMRead", e)
+		}
+		// It's a fresh new device. Devices bought via Adafruit already have
+		// their EEPROM programmed with Adafruit branding but devices sold by
+		// CJMCU are not. Since d2xxGetDeviceInfo() above succeeded, we know the
+		// device type via the USB descriptor, which is sufficient to load the
+		// driver, which permits to program the EEPROM to "bootstrap" it.
+		//
+		// Fill it with an empty yet valid EEPROM content. We don't want to set
+		// VenID or DevID to 0! Nobody would do that, right?
+		ee.Raw = make([]byte, d.t.eepromSize())
+		hdr := (*eepromHeader)(unsafe.Pointer(&ee.Raw[0]))
+		hdr.deviceType = d.t
+		hdr.VendorID = d.venID
+		hdr.ProductID = d.devID
+	}
+	return nil
+}
+
+func (d *device) programEEPROM(ee *EEPROM) error {
+	// Verify that the values are set correctly.
+	if len(ee.Manufacturer) > 40 {
+		return errors.New("d2xx: Manufacturer is too long")
+	}
+	if len(ee.ManufacturerID) > 40 {
+		return errors.New("d2xx: ManufacturerID is too long")
+	}
+	if len(ee.Desc) > 40 {
+		return errors.New("d2xx: Desc is too long")
+	}
+	if len(ee.Serial) > 40 {
+		return errors.New("d2xx: Serial is too long")
+	}
+	if len(ee.Manufacturer)+len(ee.Desc) > 40 {
+		return errors.New("d2xx: length of Manufacturer plus Desc is too long")
+	}
+	if len(ee.Raw) != 0 {
+		hdr := (*eepromHeader)(unsafe.Pointer(&ee.Raw[0]))
+		if hdr.deviceType != d.t {
+			return errors.New("d2xx: unexpected device type set while programming EEPROM")
+		}
+		if hdr.VendorID != d.venID {
+			return errors.New("d2xx: unexpected VenID set while programming EEPROM")
+		}
+		if hdr.ProductID != d.devID {
+			return errors.New("d2xx: unexpected DevID set while programming EEPROM")
+		}
+	}
+	return toErr("EEPROMWrite", d.h.d2xxEEPROMProgram(ee))
+}
+
 func (d *device) readUA() ([]byte, error) {
 	size, e := d.h.d2xxEEUASize()
 	if e != 0 {
@@ -254,15 +297,15 @@ func (d *device) writeUA(ua []byte) error {
 type devType uint32
 
 const (
-	ftBM devType = iota
+	ftBM devType = iota // 0
 	ftAM
 	ft100AX
-	unknown
+	unknown // 3
 	ft2232C
-	ft232R
+	ft232R // 5
 	ft2232H
 	ft4232H
-	ft232H
+	ft232H // 8
 	ftXSeries
 	ft4222H0
 	ft4222H1_2
@@ -273,36 +316,36 @@ const (
 	ftUMFTPD3A
 )
 
-func (d devType) String() string {
+func (d devType) Type() Type {
 	switch d {
 	case ftBM:
-		return "ftbm"
+		return "FTBM"
 	case ftAM:
-		return "ftam"
+		return "FTAM"
 	case ft100AX:
-		return "ft100ax"
+		return "FT100AX"
 	case ft2232C:
-		return "ft2232c"
+		return "FT2232C"
 	case ft232R:
-		return "ft232r"
+		return "FT232R"
 	case ft2232H:
 		return "ft2232h"
 	case ft4232H:
-		return "ft4232h"
+		return "FT4232H"
 	case ft232H:
-		return "ft232h"
+		return "FT232H"
 	case ftXSeries:
-		return "ft2NNx"
+		return "FT2NNX"
 	case ft4222H0:
-		return "ft4222h 0"
+		return "FT4222H0"
 	case ft4222H1_2:
-		return "ft4222h 1 or 2"
+		return "FT4222H"
 	case ft4222H3:
-		return "ft4222h 3"
+		return "FT4222H3"
 	case ft4222Prog:
-		return "ft4222 prog"
+		return "FT4222Prog"
 	default:
-		return "unknown"
+		return "Unknown"
 	}
 }
 
@@ -353,23 +396,6 @@ const (
 	ft232HCBusClk15    = 0x0B // 15MHz clock
 	ft232HCBusClk7dot5 = 0x0C // 7.5MHz clock
 )
-
-// eeprom contains the EEPROM content.
-//
-// The EEPROM is in 3 parts: the 56 bytes header, the 4 strings and the rest
-// which is used as an 'user area'. The size of the user area depends on the
-// length of the strings. Its content is not included in this struct.
-type eeprom struct {
-	// raw is the raw EEPROM content. It is normally around 56 bytes and excludes
-	// the strings.
-	raw []byte
-
-	// The following condition must be true: len(manufacturer) + len(desc) <= 40.
-	manufacturer   string
-	manufacturerID string
-	desc           string
-	serial         string
-}
 
 // eepromHeader is FT_EEPROM_HEADER.
 type eepromHeader struct {
@@ -514,8 +540,8 @@ type d2xxHandle interface {
 	d2xxClose() int
 	d2xxResetDevice() int
 	d2xxGetDeviceInfo() (devType, uint16, uint16, int)
-	d2xxEEPROMRead(d devType, e *eeprom) int
-	d2xxEEPROMProgram(e *eeprom) int
+	d2xxEEPROMRead(d devType, e *EEPROM) int
+	d2xxEEPROMProgram(e *EEPROM) int
 	d2xxEEUASize() (int, int)
 	d2xxEEUARead(ua []byte) int
 	d2xxEEUAWrite(ua []byte) int

@@ -16,30 +16,114 @@ import (
 	"periph.io/x/periph/conn/spi"
 )
 
-// VenID is the vendor ID for official FTDI devices.
-const VenID uint16 = 0x0403
+// Type is the FTDI device type.
+//
+// The value can be "FT232H", "FT232R", etc.
+//
+// An empty string means the type is unknown.
+type Type string
 
 // Info is the information gathered about the connected FTDI device.
 //
-// Some is gathered from the USB descriptor, some from the EEPROM if possible.
+// The data is gathered from the USB descriptor.
 type Info struct {
 	// Opened is true if the device was successfully opened.
 	Opened bool
 	// Type is the FTDI device type.
-	//
-	// It has the form "ft232h". An empty string means the type is unknown.
-	Type string
-	// USB descriptor information.
+	Type Type
+	// VenID is the vendor ID from the USB descriptor information. It is expected
+	// to be 0x0403 (FTDI).
 	VenID uint16
+	// DevID is the product ID from the USB descriptor information. It is
+	// expected to be one of 0x6001, 0x6006 or 0x6010.
 	DevID uint16
+}
 
-	// The remainder is part of EEPROM.
+// EEPROM is the unprocessed EEPROM content.
+//
+// The EEPROM is in 3 parts: the 56 bytes header, the 4 strings and the rest
+// which is used as an 'user area'. The size of the user area depends on the
+// length of the strings. The user area content is not included in this struct.
+type EEPROM struct {
+	// Raw is the raw EEPROM content. It is normally around 56 bytes and excludes
+	// the strings.
+	Raw []byte
 
+	// The following condition must be true: len(Manufacturer) + len(Desc) <= 40.
 	Manufacturer   string
 	ManufacturerID string
 	Desc           string
 	Serial         string
+}
 
+func (e *EEPROM) Interpret(t Type, p *ProcessedEEPROM) {
+	if len(e.Raw) == 0 {
+		return
+	}
+	// Use the custom structs instead of the ones provided by the library. The
+	// reason is that it had to be written for Windows anyway, and this enables
+	// using a single code path everywhere.
+	hdr := (*eepromHeader)(unsafe.Pointer(&e.Raw[0]))
+	p.MaxPower = uint16(hdr.MaxPower)
+	p.SelfPowered = hdr.SelfPowered != 0
+	p.RemoteWakeup = hdr.RemoteWakeup != 0
+	p.PullDownEnable = hdr.PullDownEnable != 0
+	switch t {
+	case "FT232H":
+		h := (*eepromFt232h)(unsafe.Pointer(&e.Raw[0]))
+		p.CSlowSlew = h.ACSlowSlew != 0
+		p.CSchmittInput = h.ACSchmittInput != 0
+		p.CDriveCurrent = uint8(h.ACDriveCurrent)
+		p.DSlowSlew = h.ADSlowSlew != 0
+		p.DSchmittInput = h.ADSchmittInput != 0
+		p.DDriveCurrent = uint8(h.ADDriveCurrent)
+		p.Cbus0 = uint8(h.Cbus0)
+		p.Cbus1 = uint8(h.Cbus1)
+		p.Cbus2 = uint8(h.Cbus2)
+		p.Cbus3 = uint8(h.Cbus3)
+		p.Cbus4 = uint8(h.Cbus4)
+		p.Cbus5 = uint8(h.Cbus5)
+		p.Cbus6 = uint8(h.Cbus6)
+		p.Cbus7 = uint8(h.Cbus7)
+		p.Cbus8 = uint8(h.Cbus8)
+		p.Cbus9 = uint8(h.Cbus9)
+		p.FT1248Cpol = h.FT1248Cpol != 0
+		p.FT1248Lsb = h.FT1248Lsb != 0
+		p.FT1248FlowControl = h.FT1248FlowControl != 0
+		p.IsFifo = h.IsFifo != 0
+		p.IsFifoTar = h.IsFifoTar != 0
+		p.IsFastSer = h.IsFastSer != 0
+		p.IsFT1248 = h.IsFT1248 != 0
+		p.PowerSaveEnable = h.PowerSaveEnable != 0
+		p.DriverType = uint8(h.DriverType)
+	case "FT232R":
+		h := (*eepromFt232r)(unsafe.Pointer(&e.Raw[0]))
+		p.IsHighCurrent = h.IsHighCurrent != 0
+		p.UseExtOsc = h.UseExtOsc != 0
+		p.InvertTXD = h.InvertTXD != 0
+		p.InvertRXD = h.InvertRXD != 0
+		p.InvertRTS = h.InvertRTS != 0
+		p.InvertCTS = h.InvertCTS != 0
+		p.InvertDTR = h.InvertDTR != 0
+		p.InvertDSR = h.InvertDSR != 0
+		p.InvertDCD = h.InvertDCD != 0
+		p.InvertRI = h.InvertRI != 0
+		p.Cbus0 = uint8(h.Cbus0)
+		p.Cbus1 = uint8(h.Cbus1)
+		p.Cbus2 = uint8(h.Cbus2)
+		p.Cbus3 = uint8(h.Cbus3)
+		p.Cbus4 = uint8(h.Cbus4)
+		p.DriverType = uint8(h.DriverType)
+	default:
+		// TODO(maruel): Implement me!
+	}
+}
+
+// ProcessedEEPROM is the interpreted EEPROM content.
+//
+// Interpretation depends on the device and this struct us prone to change as
+// new FTDI devices are supported.
+type ProcessedEEPROM struct {
 	MaxPower       uint16 // 0 < MaxPower <= 500
 	SelfPowered    bool   // false if powered by the USB bus
 	RemoteWakeup   bool   //
@@ -89,83 +173,6 @@ type Info struct {
 	//Cbus3         uint8 // Cbus Mux control
 	//Cbus4         uint8 // Cbus Mux control
 	//DriverType    uint8 //
-
-	// EEPROM is the raw EEPROM data.
-	EEPROM []byte
-}
-
-func (i *Info) fromEEPROM(d *device, ee *eeprom) {
-	i.Type = d.t.String()
-	i.VenID = d.venID
-	i.DevID = d.devID
-	i.Manufacturer = ee.manufacturer
-	i.ManufacturerID = ee.manufacturerID
-	i.Desc = ee.desc
-	i.Serial = ee.serial
-	if len(ee.raw) > 0 {
-		// Only consider the device "good" if we could read the EEPROM.
-		i.Opened = true
-		i.EEPROM = make([]byte, len(ee.raw))
-		copy(i.EEPROM, ee.raw)
-
-		// Use the custom structs instead of the ones provided by the library. The
-		// reason is that it had to be written for Windows anyway, and this enables
-		// using a single code path everywhere.
-		hdr := (*eepromHeader)(unsafe.Pointer(&ee.raw[0]))
-		i.MaxPower = uint16(hdr.MaxPower)
-		i.SelfPowered = hdr.SelfPowered != 0
-		i.RemoteWakeup = hdr.RemoteWakeup != 0
-		i.PullDownEnable = hdr.PullDownEnable != 0
-		switch d.t {
-		case ft232H:
-			h := (*eepromFt232h)(unsafe.Pointer(&ee.raw[0]))
-			i.CSlowSlew = h.ACSlowSlew != 0
-			i.CSchmittInput = h.ACSchmittInput != 0
-			i.CDriveCurrent = uint8(h.ACDriveCurrent)
-			i.DSlowSlew = h.ADSlowSlew != 0
-			i.DSchmittInput = h.ADSchmittInput != 0
-			i.DDriveCurrent = uint8(h.ADDriveCurrent)
-			i.Cbus0 = uint8(h.Cbus0)
-			i.Cbus1 = uint8(h.Cbus1)
-			i.Cbus2 = uint8(h.Cbus2)
-			i.Cbus3 = uint8(h.Cbus3)
-			i.Cbus4 = uint8(h.Cbus4)
-			i.Cbus5 = uint8(h.Cbus5)
-			i.Cbus6 = uint8(h.Cbus6)
-			i.Cbus7 = uint8(h.Cbus7)
-			i.Cbus8 = uint8(h.Cbus8)
-			i.Cbus9 = uint8(h.Cbus9)
-			i.FT1248Cpol = h.FT1248Cpol != 0
-			i.FT1248Lsb = h.FT1248Lsb != 0
-			i.FT1248FlowControl = h.FT1248FlowControl != 0
-			i.IsFifo = h.IsFifo != 0
-			i.IsFifoTar = h.IsFifoTar != 0
-			i.IsFastSer = h.IsFastSer != 0
-			i.IsFT1248 = h.IsFT1248 != 0
-			i.PowerSaveEnable = h.PowerSaveEnable != 0
-			i.DriverType = uint8(h.DriverType)
-		case ft232R:
-			h := (*eepromFt232r)(unsafe.Pointer(&ee.raw[0]))
-			i.IsHighCurrent = h.IsHighCurrent != 0
-			i.UseExtOsc = h.UseExtOsc != 0
-			i.InvertTXD = h.InvertTXD != 0
-			i.InvertRXD = h.InvertRXD != 0
-			i.InvertRTS = h.InvertRTS != 0
-			i.InvertCTS = h.InvertCTS != 0
-			i.InvertDTR = h.InvertDTR != 0
-			i.InvertDSR = h.InvertDSR != 0
-			i.InvertDCD = h.InvertDCD != 0
-			i.InvertRI = h.InvertRI != 0
-			i.Cbus0 = uint8(h.Cbus0)
-			i.Cbus1 = uint8(h.Cbus1)
-			i.Cbus2 = uint8(h.Cbus2)
-			i.Cbus3 = uint8(h.Cbus3)
-			i.Cbus4 = uint8(h.Cbus4)
-			i.DriverType = uint8(h.DriverType)
-		default:
-			// TODO(maruel): Implement me!
-		}
-	}
 }
 
 // Dev represents one FTDI device.
@@ -180,12 +187,21 @@ type Dev interface {
 	String() string
 	Halt() error
 
-	// GetInfo returns information about an opened device.
-	GetInfo(i *Info)
-	// UserArea is the EEPROM part that can be used to stored user defined values.
+	// Info returns information about an opened device.
+	Info(i *Info)
+
+	// EEPROM returns the EEPROM content.
+	EEPROM(ee *EEPROM) error
+	// WriteEEPROM updates the EEPROM. Must be used carefully.
+	WriteEEPROM(ee *EEPROM) error
+	// UserArea reads and return the EEPROM part that can be used to stored user
+	// defined values.
 	UserArea() ([]byte, error)
-	// WriteUserArea updates the user area EEPROM.
+	// WriteUserArea updates the user area in the EEPROM.
+	//
+	// If the length of ua is less than the available space, is it zero extended.
 	WriteUserArea(ua []byte) error
+
 	// Header returns the GPIO pins exposed on the chip.
 	Header() []gpio.PinIO
 }
@@ -208,9 +224,16 @@ func (b *broken) Halt() error {
 	return nil
 }
 
-func (b *broken) GetInfo(i *Info) {
+func (b *broken) Info(i *Info) {
 	i.Opened = false
-	i.Type = b.err.Error()
+}
+
+func (b *broken) EEPROM(ee *EEPROM) error {
+	return b.err
+}
+
+func (b *broken) WriteEEPROM(ee *EEPROM) error {
+	return b.err
 }
 
 func (b *broken) UserArea() ([]byte, error) {
@@ -231,12 +254,16 @@ func (b *broken) Header() []gpio.PinIO {
 type generic struct {
 	// Immutable after initialization.
 	index int
-	h     *device // it may be nil if the device couldn't be opened.
-	ee    eeprom
+	h     device
+
+	// Mutable.
+	initialized bool
+	// ee is a cache of the device's EEPROM content.
+	//ee EEPROM
 }
 
 func (f *generic) String() string {
-	return f.typeName() + "(" + strconv.Itoa(f.index) + ")"
+	return string(f.h.t.Type()) + "(" + strconv.Itoa(f.index) + ")"
 }
 
 // Halt implements conn.Resource.
@@ -246,9 +273,37 @@ func (f *generic) Halt() error {
 	return f.h.reset()
 }
 
-// GetInfo returns information about an opened device.
-func (f *generic) GetInfo(i *Info) {
-	i.fromEEPROM(f.h, &f.ee)
+// Info returns information about an opened device.
+func (f *generic) Info(i *Info) {
+	i.Opened = true
+	i.Type = f.h.t.Type()
+	i.VenID = f.h.venID
+	i.DevID = f.h.devID
+}
+
+func (f *generic) EEPROM(ee *EEPROM) error {
+	return f.h.readEEPROM(ee)
+	/*
+		if f.ee.Raw == nil {
+			if err := f.h.readEEPROM(&f.ee); err != nil {
+				return nil
+			}
+			if f.ee.Raw == nil {
+				// It's a fresh new device. Devices bought via Adafruit already have
+				// their EEPROM programmed with Adafruit branding but devices sold by
+				// CJMCU are not. Since d2xxGetDeviceInfo() above succeeded, we know the
+				// device type via the USB descriptor, which is sufficient to load the
+				// driver, which permits to program the EEPROM to "bootstrap" it.
+				f.ee.Raw = []byte{}
+			}
+		}
+		*ee = f.ee
+		return nil
+	*/
+}
+
+func (f *generic) WriteEEPROM(ee *EEPROM) error {
+	return f.h.programEEPROM(ee)
 }
 
 func (f *generic) UserArea() ([]byte, error) {
@@ -265,11 +320,11 @@ func (f *generic) Header() []gpio.PinIO {
 }
 
 func (f *generic) initialize() error {
-	return f.h.initialize(&f.ee)
-}
-
-func (f *generic) typeName() string {
-	return f.h.t.String()
+	if err := f.h.initialize(); err != nil {
+		return err
+	}
+	f.initialized = true
+	return nil
 }
 
 //
@@ -277,8 +332,8 @@ func (f *generic) typeName() string {
 func newFT232H(g generic) *FT232H {
 	f := &FT232H{
 		generic: g,
-		cbus:    gpiosMPSSE{h: g.h, cbus: true},
-		dbus:    gpiosMPSSE{h: g.h},
+		cbus:    gpiosMPSSE{h: &g.h, cbus: true},
+		dbus:    gpiosMPSSE{h: &g.h},
 	}
 	f.cbus.init()
 	f.dbus.init()

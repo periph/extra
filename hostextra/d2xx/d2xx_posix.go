@@ -59,17 +59,17 @@ func (h handle) d2xxGetDeviceInfo() (devType, uint16, uint16, int) {
 	return devType(dev), uint16(id >> 16), uint16(id), 0
 }
 
-func (h handle) d2xxEEPROMRead(t devType, ee *eeprom) int {
+func (h handle) d2xxEEPROMRead(t devType, ee *EEPROM) int {
 	var manufacturer [64]C.char
 	var manufacturerID [64]C.char
 	var desc [64]C.char
 	var serial [64]C.char
-	if l := t.eepromSize(); len(ee.raw) < l {
-		ee.raw = make([]byte, t.eepromSize())
-	} else if len(ee.raw) > l {
-		ee.raw = ee.raw[:l]
+	if l := t.eepromSize(); len(ee.Raw) < l {
+		ee.Raw = make([]byte, t.eepromSize())
+	} else if len(ee.Raw) > l {
+		ee.Raw = ee.Raw[:l]
 	}
-	eepromVoid := unsafe.Pointer(&ee.raw[0])
+	eepromVoid := unsafe.Pointer(&ee.Raw[0])
 	hdr := (*eepromHeader)(eepromVoid)
 
 	// There something odd going on here.
@@ -78,25 +78,25 @@ func (h handle) d2xxEEPROMRead(t devType, ee *eeprom) int {
 	// ft232r, it MUST be set. Since we can't know in advance what we must use,
 	// just try both. ¯\_(ツ)_/¯
 	hdr.deviceType = t
-	if e := C.FT_EEPROM_Read(h.toH(), eepromVoid, C.DWORD(len(ee.raw)), &manufacturer[0], &manufacturerID[0], &desc[0], &serial[0]); e != 0 {
+	if e := C.FT_EEPROM_Read(h.toH(), eepromVoid, C.DWORD(len(ee.Raw)), &manufacturer[0], &manufacturerID[0], &desc[0], &serial[0]); e != 0 {
 		// FT_INVALID_PARAMETER
 		if e == 6 {
 			hdr.deviceType = 0
-			e = C.FT_EEPROM_Read(h.toH(), eepromVoid, C.DWORD(len(ee.raw)), &manufacturer[0], &manufacturerID[0], &desc[0], &serial[0])
+			e = C.FT_EEPROM_Read(h.toH(), eepromVoid, C.DWORD(len(ee.Raw)), &manufacturer[0], &manufacturerID[0], &desc[0], &serial[0])
 		}
 		if e != 0 {
 			return int(e)
 		}
 	}
 
-	ee.manufacturer = C.GoString(&manufacturer[0])
-	ee.manufacturerID = C.GoString(&manufacturerID[0])
-	ee.desc = C.GoString(&desc[0])
-	ee.serial = C.GoString(&serial[0])
+	ee.Manufacturer = C.GoString(&manufacturer[0])
+	ee.ManufacturerID = C.GoString(&manufacturerID[0])
+	ee.Desc = C.GoString(&desc[0])
+	ee.Serial = C.GoString(&serial[0])
 	return 0
 }
 
-func (h handle) d2xxEEPROMProgram(ee *eeprom) int {
+func (h handle) d2xxEEPROMProgram(ee *EEPROM) int {
 	// len(manufacturer) + len(desc) <= 40.
 	/*
 		var cmanu [64]byte
@@ -108,19 +108,19 @@ func (h handle) d2xxEEPROMProgram(ee *eeprom) int {
 		var cserial [64]byte
 		copy(cserial[:], ee.serial)
 	*/
-	cmanu := C.CString(ee.manufacturer)
+	cmanu := C.CString(ee.Manufacturer)
 	defer C.free(unsafe.Pointer(cmanu))
-	cmanuID := C.CString(ee.manufacturerID)
+	cmanuID := C.CString(ee.ManufacturerID)
 	defer C.free(unsafe.Pointer(cmanuID))
-	cdesc := C.CString(ee.desc)
+	cdesc := C.CString(ee.Desc)
 	defer C.free(unsafe.Pointer(cdesc))
-	cserial := C.CString(ee.serial)
+	cserial := C.CString(ee.Serial)
 	defer C.free(unsafe.Pointer(cserial))
 
-	if e := C.FT_EEPROM_Program(h.toH(), unsafe.Pointer(&ee.raw[0]), C.DWORD(len(ee.raw)), cmanu, cmanuID, cdesc, cserial); e != 0 {
-		return int(e)
+	if len(ee.Raw) == 0 {
+		return int(C.FT_EEPROM_Program(h.toH(), unsafe.Pointer(uintptr(0)), 0, cmanu, cmanuID, cdesc, cserial))
 	}
-	return 0
+	return int(C.FT_EEPROM_Program(h.toH(), unsafe.Pointer(&ee.Raw[0]), C.DWORD(len(ee.Raw)), cmanu, cmanuID, cdesc, cserial))
 }
 
 func (h handle) d2xxEEUASize() (int, int) {
