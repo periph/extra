@@ -42,6 +42,9 @@ func (d *Dev) SenseContinuous(interval time.Duration) (<-chan physic.Env, error)
 	return nil, errors.New("winthermal: not implemented yet")
 }
 
+func (d *Dev) Precision(e *physic.Env) {
+}
+
 //
 
 // obj represents a MSAcpi_ThermalZoneTemperature instance. It intentionally
