@@ -248,11 +248,13 @@ func newFT232H(g generic) (*FT232H, error) {
 //
 // It implements Dev.
 //
-// The device can be used in a few different modes:
-// - D0~D3 as a serial protocol, supporting I²C and SPI (and eventually UART),
-//   In this mode, D4~D7 and C0~C7 can be used as GPIO.
-// - D0~D7 as a synchronous 8 bits bit-bang port. In this mode, CBus is hardly
-// usable.
+// The device can be used in a few different modes, two modes are supported:
+//
+// - D0~D3 as a serial protocol (MPSEE), supporting I²C and SPI (and eventually
+// UART), In this mode, D4~D7 and C0~C7 can be used as synchronized GPIO.
+//
+// - D0~D7 as a synchronous 8 bits bit-bang port. In this mode, only a few pins
+// on CBus are usable in slow mode.
 //
 // Each group of pins D0~D7 and C0~C7 can be changed at once in one pass via
 // DBus() or CBus().
