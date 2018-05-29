@@ -533,37 +533,37 @@ func newFT232R(g generic) *FT232R {
 	f := &FT232R{
 		generic: g,
 		pins: [...]invalidPin{
-			{num: 0, n: "C0"},              // dp: gpio.PullUp
-			{num: 1, n: "C1"},              // dp: gpio.PullUp
-			{num: 2, n: "C2"},              // dp: gpio.PullUp
-			{num: 3, n: "C3"},              // dp: gpio.Float
-			{num: 4, n: "C4"},              // dp: gpio.Float
-			{num: 5, n: "TX", f: "UART"},   // dp: gpio.PullUp
-			{num: 6, n: "RX", f: "UART"},   // dp: gpio.PullUp
-			{num: 7, n: "RTS", f: "UART"},  // dp: gpio.PullUp
-			{num: 8, n: "CTS", f: "UART"},  // dp: gpio.PullUp
-			{num: 9, n: "DTR", f: "UART"},  // dp: gpio.PullUp
-			{num: 10, n: "DSR", f: "UART"}, // dp: gpio.PullUp
-			{num: 11, n: "DCD", f: "UART"}, // dp: gpio.PullUp
-			{num: 12, n: "RI", f: "UART"},  // dp: gpio.PullUp
+			{num: 0, n: "TX", f: "UART"},  // dp: gpio.PullUp
+			{num: 1, n: "RX", f: "UART"},  // dp: gpio.PullUp
+			{num: 2, n: "RTS", f: "UART"}, // dp: gpio.PullUp
+			{num: 3, n: "CTS", f: "UART"}, // dp: gpio.PullUp
+			{num: 4, n: "DTR", f: "UART"}, // dp: gpio.PullUp
+			{num: 5, n: "DSR", f: "UART"}, // dp: gpio.PullUp
+			{num: 6, n: "DCD", f: "UART"}, // dp: gpio.PullUp
+			{num: 7, n: "RI", f: "UART"},  // dp: gpio.PullUp
+			{num: 8, n: "C0"},             // dp: gpio.PullUp
+			{num: 9, n: "C1"},             // dp: gpio.PullUp
+			{num: 10, n: "C2"},            // dp: gpio.PullUp
+			{num: 11, n: "C3"},            // dp: gpio.Float
+			{num: 12, n: "C4"},            // dp: gpio.Float
 		},
 	}
 	for i := range f.pins {
 		f.hdr[i] = &f.pins[i]
 	}
-	f.C0 = f.hdr[0]
-	f.C1 = f.hdr[1]
-	f.C2 = f.hdr[2]
-	f.C3 = f.hdr[3]
-	f.C4 = f.hdr[4]
-	f.TX = f.hdr[5]
-	f.RX = f.hdr[6]
-	f.RTS = f.hdr[7]
-	f.CTS = f.hdr[8]
-	f.DTR = f.hdr[9]
-	f.DSR = f.hdr[10]
-	f.DCD = f.hdr[11]
-	f.RI = f.hdr[12]
+	f.TX = f.hdr[0]
+	f.RX = f.hdr[1]
+	f.RTS = f.hdr[2]
+	f.CTS = f.hdr[3]
+	f.DTR = f.hdr[4]
+	f.DSR = f.hdr[5]
+	f.DCD = f.hdr[6]
+	f.RI = f.hdr[7]
+	f.C0 = f.hdr[8]
+	f.C1 = f.hdr[9]
+	f.C2 = f.hdr[10]
+	f.C3 = f.hdr[11]
+	f.C4 = f.hdr[12]
 	return f
 }
 
@@ -578,25 +578,28 @@ func newFT232R(g generic) *FT232R {
 //
 // SparkFun's version exports all pins *except* (inexplicably) the CBus ones.
 //
+// The FT232R has 128 bytes output buffer and 256 bytes input buffer.
+//
 // Datasheet
 //
 // http://www.ftdichip.com/Support/Documents/DataSheets/ICs/DS_FT232R.pdf
 type FT232R struct {
 	generic
 
-	C0  gpio.PinIO
-	C1  gpio.PinIO
-	C2  gpio.PinIO
-	C3  gpio.PinIO
-	C4  gpio.PinIO
-	TX  gpio.PinIO // TXD
-	RX  gpio.PinIO // RXD
-	RTS gpio.PinIO
-	CTS gpio.PinIO
-	DTR gpio.PinIO
-	DSR gpio.PinIO
-	DCD gpio.PinIO
-	RI  gpio.PinIO
+	TX  gpio.PinIO // D0 TXD
+	RX  gpio.PinIO // D1 RXD
+	RTS gpio.PinIO // D2
+	CTS gpio.PinIO // D3
+	DTR gpio.PinIO // D4
+	DSR gpio.PinIO // D5
+	DCD gpio.PinIO // D6
+	RI  gpio.PinIO // D7
+
+	C0 gpio.PinIO
+	C1 gpio.PinIO
+	C2 gpio.PinIO
+	C3 gpio.PinIO
+	C4 gpio.PinIO
 
 	pins [13]invalidPin
 	hdr  [13]gpio.PinIO
