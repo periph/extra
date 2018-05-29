@@ -111,7 +111,7 @@ func (d *device) setupCommon() error {
 		return toErr("SetFlowControl", e)
 	}
 	// Device: Reset mode to setting in EEPROM.
-	if err := d.setBitMode(0, 0); err != nil {
+	if err := d.setBitMode(0, bitModeReset); err != nil {
 		return nil
 	}
 	return nil
@@ -137,19 +137,9 @@ func (d *device) getBitMode() (byte, error) {
 
 // setBitMode change the mode of operation of the device.
 //
-// mask sets which pins are inputs and outputs.
-//
-// mode can be:
-//  0x00 Reset
-//  0x01 Asynchronous bit bang
-//  0x02 MPSSE (ft232h, ft2232, ft2232h, ft4232h)
-//  0x04 Synchronous bit bang (ft232h, ft232r, ft245r, ft2232, ft2232h, ft4232h)
-//  0x08 MCU host bus emulation mode (ft232h, ft2232, ft2232h, ft4232h)
-//  0x10 Fast opto-isolated serial mode (ft232h, ft2232, ft2232h, ft4232h)
-//  0x20 CBus bit bang mode (ft232h and ft232r)
-//  0x40 Single channel synchronous 245 fifo mode (ft232h and ft2232h)
-func (d *device) setBitMode(mask, mode byte) error {
-	return toErr("SetBitMode", d.h.d2xxSetBitMode(mask, mode))
+// mask sets which pins are inputs and outputs for bitModeCbusBitbang.
+func (d *device) setBitMode(mask byte, mode bitMode) error {
+	return toErr("SetBitMode", d.h.d2xxSetBitMode(mask, byte(mode)))
 }
 
 // flushPending flushes any data left in the read buffer.
@@ -357,117 +347,188 @@ func (d devType) eepromSize() int {
 const missing = -1
 const noCGO = -2
 
+// bitMode is used by setBitMode to change the chip behavior.
+type bitMode uint8
+
 const (
-	bitmodeReset        = 0x00 // Reset all Pins to their default value
-	bitmodeAsyncBitbang = 0x01 // Asynchronous bit bang
-	bitmodeMpsse        = 0x02 // MPSSE (ft2232, ft2232h, ft4232h, ft232h)
-	bitmodeSyncBitbang  = 0x04 // Synchronous bit bang (ft232r, ft245r, ft2232, ft2232h, ft4232h and ft232h)
-	bitmodeMcuHost      = 0x08 // MCU host bus emulation (ft2232, ft2232h, ft4232h and ft232h)
-	bitmodeFastSerial   = 0x10 // Fast opto-isolated serial mode (ft2232, ft2232h, ft4232h and ft232h)
+	// Resets all Pins to their default value
+	bitModeReset bitMode = 0x00
+	// Sets the DBus to asynchronous bit-bang.
+	bitModeAsyncBitbang bitMode = 0x01
+	// Switch to MPSSE mode (FT2232, FT2232H, FT4232H and FT232H).
+	bitModeMpsse bitMode = 0x02
+	// Sets the DBus to synchronous bit-bang (FT232R, FT245R, FT2232, FT2232H,
+	// FT4232H and FT232H).
+	bitModeSyncBitbang bitMode = 0x04
+	// Switch to MCU host bus emulation (FT2232, FT2232H, FT4232H and FT232H).
+	bitModeMcuHost bitMode = 0x08
+	// Switch to fast opto-isolated serial mode (FT2232, FT2232H, FT4232H and
+	// FT232H).
+	bitModeFastSerial bitMode = 0x10
+	// Sets the CBus in 4 bits bit-bang mode (FT232R and FT232H)
 	// In this case, upper nibble controls which pin is output/input, lower
 	// controls which of outputs are high and low.
-	bitmodeCbusBitbang = 0x20 // CBUS bit bang (ft232r and ft232h)
-	bitmodeSyncFifo    = 0x40 // Single Channel Synchronous 245 FIFO mode (ft2232h and ft232h)
+	bitModeCbusBitbang bitMode = 0x20
+	// Single Channel Synchronous 245 FIFO mode (FT2232H and FT232H).
+	bitModeSyncFifo bitMode = 0x40
 )
 
-// For FT_EE_Program with FT_PROGRAM_DATA.
+// ft232rCBusMuxCtl is stored in the FT232R EEPROM to control each CBus pin.
+type ft232rCBusMuxCtl uint8
+
 const (
-	ft232HCBusTristate = 0x00 // Tristate
-	ft232HCBusTxled    = 0x01 // Tx LED
-	ft232HCBusRxled    = 0x02 // Rx LED
-	ft232HCBusTxrxled  = 0x03 // Tx and Rx LED
-	ft232HCBusPwren    = 0x04 // Power Enable
-	ft232HCBusSleep    = 0x05 // Sleep
-	ft232HCBusDrive0   = 0x06 // Drive pin to logic 0
-	ft232HCBusDrive1   = 0x07 // Drive pin to logic 1
-	ft232HCBusIomode   = 0x08 // IO Mode for CBUS bit-bang
-	ft232HCBusTxden    = 0x09 // Tx Data Enable
-	ft232HCBusClk30    = 0x0A // 30MHz clock
-	ft232HCBusClk15    = 0x0B // 15MHz clock
-	ft232HCBusClk7dot5 = 0x0C // 7.5MHz clock
+	// TXDEN; Tx Data Enable. Used with RS485 level converters to enable the line
+	// driver during data transmit. It is active one bit time before the start
+	// bit up to until the end of the stop bit (C0~C4).
+	ft232rCBusTxdEnable ft232rCBusMuxCtl = 0x00
+	// PWREN#; Output is low after the device has been configured by USB, then
+	// high during USB suspend mode (C0~C4).
+	//
+	// Must be used with an external 10kΩ pull up.
+	ft232rCBusPwrEnable ft232rCBusMuxCtl = 0x01
+	// RXLED#; Pulses low when receiving data (C0~C4).
+	ft232rCBusRxLED ft232rCBusMuxCtl = 0x02
+	// TXLED#; Pulses low when transmitting data (C0~C4).
+	ft232rCBusTxLED ft232rCBusMuxCtl = 0x03
+	// TX&RXLED#; Pulses low when either receiving or transmitting data (C0~C4).
+	ft232rCBusTxRxLED ft232rCBusMuxCtl = 0x04
+	// SLEEP# Goes low during USB suspend mode (C0~C4).
+	ft232rCBusSleep ft232rCBusMuxCtl = 0x05
+	// CLK48 48Mhz +/-0.7% clock output (C0~C4).
+	ft232rCBusClk48 ft232rCBusMuxCtl = 0x06
+	// CLK24 24Mhz clock output (C0~C4).
+	ft232rCBusClk24 ft232rCBusMuxCtl = 0x07
+	// CLK12 12Mhz clock output (C0~C4).
+	ft232rCBusClk12 ft232rCBusMuxCtl = 0x08
+	// CLK6 6Mhz +/-0.7% clock output (C0~C4).
+	ft232rCBusClk6 ft232rCBusMuxCtl = 0x09
+	// CBitBangI/O; CBus bit-bang mode option (C0~C3).
+	ft232rCBusIOMode ft232rCBusMuxCtl = 0x0A
+	// BitBangWRn; CBus WR# strobe output (C0~C3).
+	ft232rCBusBitBangWR ft232rCBusMuxCtl = 0x0B
+	// BitBangRDn; CBus RD# strobe output (C0~C3).
+	ft232rCBusBitBangRD ft232rCBusMuxCtl = 0x0C
+)
+
+// ft232hCBusMuxCtl is stored in the FT232H EEPROM to control each CBus pin.
+type ft232hCBusMuxCtl uint8
+
+const (
+	// TriSt-PU; Sets in Tristate (pull up) (C0~C6, C8, C9) on 75kΩ.
+	ft232hCBusTristatePU ft232hCBusMuxCtl = 0x00
+	// TXLED#; Pulses low when transmitting data (C0~C6, C8, C9).
+	ft232hCBusTxLED ft232hCBusMuxCtl = 0x01
+	// RXLED#; Pulses low when receiving data (C0~C6, C8, C9).
+	ft232hCBusRxLED ft232hCBusMuxCtl = 0x02
+	// TX&RXLED#; Pulses low when either receiving or transmitting data (C0~C6,
+	// C8, C9).
+	ft232hCBusTxRxLED ft232hCBusMuxCtl = 0x03
+	// PWREN#; Output is low after the device has been configured by USB, then
+	// high during USB suspend mode (C0~C6, C8, C9).
+	//
+	// Must be used with an external 10kΩ pull up.
+	ft232hCBusPwrEnable ft232hCBusMuxCtl = 0x04
+	// SLEEP#; Goes low during USB suspend mode (C0~C6, C8, C9).
+	ft232hCBusSleep ft232hCBusMuxCtl = 0x05
+	// DRIVE1; Drives pin to logic 0 (C0~C6, C8, C9).
+	ft232hCBusDrive0 ft232hCBusMuxCtl = 0x06
+	// DRIVE1; Drives pin to logic 1 (C0, C5, C6, C8, C9).
+	ft232hCBusDrive1 ft232hCBusMuxCtl = 0x07
+	// I/O Mode; CBus bit-bang mode option (C5, C6, C8, C9).
+	ft232hCBusIOMode ft232hCBusMuxCtl = 0x08
+	// TXDEN; Tx Data Enable. Used with RS485 level converters to enable the line
+	// driver during data transmit. It is active one bit time before the start
+	// bit up to until the end of the stop bit (C0~C6, C8, C9).
+	ft232hCBusTxdEnable ft232hCBusMuxCtl = 0x09
+	// CLK30 30MHz clock output (C0, C5, C6, C8, C9).
+	ft232hCBusClk30 ft232hCBusMuxCtl = 0x0A
+	// CLK15 15MHz clock output (C0, C5, C6, C8, C9).
+	ft232hCBusClk15 ft232hCBusMuxCtl = 0x0B
+	// CLK7.5 7.5MHz clock output (C0, C5, C6, C8, C9).
+	ft232hCBusClk7_5 ft232hCBusMuxCtl = 0x0C
 )
 
 // eepromHeader is FT_EEPROM_HEADER.
 type eepromHeader struct {
 	deviceType     devType // FTxxxx device type to be programmed
-	VendorID       uint16  // Defaults to 0x0403; can be changed.
-	ProductID      uint16  // Defaults to 0x6001 for ft232h, relevant value.
-	SerNumEnable   uint8   // Non-zero if serial number to be used.
-	MaxPower       uint16  // 0 < MaxPower <= 500
-	SelfPowered    uint8   // 0 = bus powered, 1 = self powered
-	RemoteWakeup   uint8   // 0 = not capable, 1 = capable
-	PullDownEnable uint8   //
+	VendorID       uint16  // Defaults to 0x0403; can be changed
+	ProductID      uint16  // Defaults to 0x6001 for FT232H/FT232R, relevant value
+	SerNumEnable   uint8   // bool Non-zero if serial number to be used
+	MaxPower       uint16  // 0mA < MaxPower <= 500mA
+	SelfPowered    uint8   // bool 0 = bus powered, 1 = self powered
+	RemoteWakeup   uint8   // bool 0 = not capable, 1 = capable; RI# low will wake host in 20ms.
+	PullDownEnable uint8   // bool Non zero if pull down in suspend enabled
 }
 
 // eepromFt232h is FT_EEPROM_232H
 type eepromFt232h struct {
 	// eepromHeader
 	deviceType     devType // FTxxxx device type to be programmed
-	VendorID       uint16  // 0x0403
-	ProductID      uint16  // 0x6001
-	SerNumEnable   uint8   // Non-zero if serial number to be used
-	MaxPower       uint16  // 0 < MaxPower <= 500mA
-	SelfPowered    uint8   // 0 = bus powered, 1 = self powered
-	RemoteWakeup   uint8   // 0 = not capable, 1 = capable
-	PullDownEnable uint8   // Non zero if pull down in suspect enabled
+	VendorID       uint16  // Defaults to 0x0403; can be changed
+	ProductID      uint16  // Defaults to 0x6001 for FT232H/FT232R, relevant value
+	SerNumEnable   uint8   // bool Non-zero if serial number to be used
+	MaxPower       uint16  // 0mA < MaxPower <= 500mA
+	SelfPowered    uint8   // bool 0 = bus powered, 1 = self powered
+	RemoteWakeup   uint8   // bool 0 = not capable, 1 = capable; RI# low will wake host in 20ms.
+	PullDownEnable uint8   // bool Non zero if pull down in suspend enabled
 
-	// ft232h specific.
-	ACSlowSlew        uint8 // Non-zero if AC bus pins have slow slew
-	ACSchmittInput    uint8 // Non-zero if AC bus pins are Schmitt input
-	ACDriveCurrent    uint8 // Valid values are 4mA, 8mA, 12mA, 16mA
-	ADSlowSlew        uint8 // Non-zero if AD bus pins have slow slew
-	ADSchmittInput    uint8 // Non-zero if AD bus pins are Schmitt input
-	ADDriveCurrent    uint8 // valid values are 4mA, 8mA, 12mA, 16mA
-	Cbus0             uint8 // Cbus Mux control
-	Cbus1             uint8 // Cbus Mux control
-	Cbus2             uint8 // Cbus Mux control
-	Cbus3             uint8 // Cbus Mux control
-	Cbus4             uint8 // Cbus Mux control
-	Cbus5             uint8 // Cbus Mux control
-	Cbus6             uint8 // Cbus Mux control
-	Cbus7             uint8 // Cbus Mux control
-	Cbus8             uint8 // Cbus Mux control
-	Cbus9             uint8 // Cbus Mux control
-	FT1248Cpol        uint8 // FT1248 clock polarity - clock idle high (true) or clock idle low (false)
-	FT1248Lsb         uint8 // FT1248 data is LSB (true), or MSB (false)
-	FT1248FlowControl uint8 // FT1248 flow control enable
-	IsFifo            uint8 // Non-zero if Interface is 245 FIFO
-	IsFifoTar         uint8 // Non-zero if Interface is 245 FIFO CPU target
-	IsFastSer         uint8 // Non-zero if Interface is Fast serial
-	IsFT1248          uint8 // Non-zero if Interface is FT1248
-	PowerSaveEnable   uint8 //
-	DriverType        uint8 //
+	// FT232H specific.
+	ACSlowSlew        uint8            // bool Non-zero if AC bus pins have slow slew
+	ACSchmittInput    uint8            // bool Non-zero if AC bus pins are Schmitt input
+	ACDriveCurrent    uint8            // Valid values are 4mA, 8mA, 12mA, 16mA
+	ADSlowSlew        uint8            // bool Non-zero if AD bus pins have slow slew
+	ADSchmittInput    uint8            // bool Non-zero if AD bus pins are Schmitt input
+	ADDriveCurrent    uint8            // Valid values are 4mA, 8mA, 12mA, 16mA
+	Cbus0             ft232hCBusMuxCtl //
+	Cbus1             ft232hCBusMuxCtl //
+	Cbus2             ft232hCBusMuxCtl //
+	Cbus3             ft232hCBusMuxCtl //
+	Cbus4             ft232hCBusMuxCtl //
+	Cbus5             ft232hCBusMuxCtl //
+	Cbus6             ft232hCBusMuxCtl //
+	Cbus7             ft232hCBusMuxCtl // C7 is limited a sit can only do 'suspend on C7 low'. Defaults pull down.
+	Cbus8             ft232hCBusMuxCtl //
+	Cbus9             ft232hCBusMuxCtl //
+	FT1248Cpol        uint8            // bool FT1248 clock polarity - clock idle high (true) or clock idle low (false)
+	FT1248Lsb         uint8            // bool FT1248 data is LSB (true), or MSB (false)
+	FT1248FlowControl uint8            // bool FT1248 flow control enable
+	IsFifo            uint8            // bool Non-zero if Interface is 245 FIFO
+	IsFifoTar         uint8            // bool Non-zero if Interface is 245 FIFO CPU target
+	IsFastSer         uint8            // bool Non-zero if Interface is Fast serial
+	IsFT1248          uint8            // bool Non-zero if Interface is FT1248
+	PowerSaveEnable   uint8            // bool Suspect on ACBus7 low.
+	DriverType        uint8            // bool 0 is D2XX, 1 is VCP
 }
 
 // eepromFt232r is FT_EEPROM_232R
 type eepromFt232r struct {
 	// eepromHeader
 	deviceType     devType // FTxxxx device type to be programmed
-	VendorID       uint16  // 0x0403
-	ProductID      uint16  // 0x6001
-	SerNumEnable   uint8   // Non-zero if serial number to be used
-	MaxPower       uint16  // 0 < MaxPower <= 500mA
-	SelfPowered    uint8   // 0 = bus powered, 1 = self powered
-	RemoteWakeup   uint8   // 0 = not capable, 1 = capable
-	PullDownEnable uint8   // Non zero if pull down in suspect enabled
+	VendorID       uint16  // Defaults to 0x0403; can be changed
+	ProductID      uint16  // Defaults to 0x6001 for FT232H/FT232R, relevant value
+	SerNumEnable   uint8   // bool Non-zero if serial number to be used
+	MaxPower       uint16  // 0mA < MaxPower <= 500mA
+	SelfPowered    uint8   // bool 0 = bus powered, 1 = self powered
+	RemoteWakeup   uint8   // bool 0 = not capable, 1 = capable; RI# low will wake host in 20ms.
+	PullDownEnable uint8   // bool Non zero if pull down in suspend enabled
 
-	// ft232r specific.
-	IsHighCurrent uint8 // High Drive I/Os; 3mA instead of 1mA (@3.3V)
-	UseExtOsc     uint8 // Use external oscillator
-	InvertTXD     uint8
-	InvertRXD     uint8
-	InvertRTS     uint8
-	InvertCTS     uint8
-	InvertDTR     uint8
-	InvertDSR     uint8
-	InvertDCD     uint8
-	InvertRI      uint8
-	Cbus0         uint8 // Cbus Mux control
-	Cbus1         uint8 // Cbus Mux control
-	Cbus2         uint8 // Cbus Mux control
-	Cbus3         uint8 // Cbus Mux control
-	Cbus4         uint8 // Cbus Mux control
-	DriverType    uint8 //
+	// FT232R specific.
+	IsHighCurrent uint8            // bool High Drive I/Os; 3mA instead of 1mA (@3.3V)
+	UseExtOsc     uint8            // bool Use external oscillator
+	InvertTXD     uint8            // bool
+	InvertRXD     uint8            // bool
+	InvertRTS     uint8            // bool
+	InvertCTS     uint8            // bool
+	InvertDTR     uint8            // bool
+	InvertDSR     uint8            // bool
+	InvertDCD     uint8            // bool
+	InvertRI      uint8            // bool
+	Cbus0         ft232rCBusMuxCtl // Default ft232rCBusTxLED
+	Cbus1         ft232rCBusMuxCtl // Default ft232rCBusRxLED
+	Cbus2         ft232rCBusMuxCtl // Default ft232rCBusTxdEnable
+	Cbus3         ft232rCBusMuxCtl // Default ft232rCBusPwrEnable
+	Cbus4         ft232rCBusMuxCtl // Default ft232rCBusSleep
+	DriverType    uint8            // bool 0 is D2XX, 1 is VCP
 }
 
 func toErr(s string, e int) error {

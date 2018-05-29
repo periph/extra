@@ -347,6 +347,8 @@ func newFT232H(g generic) (*FT232H, error) {
 	for i := range f.cbus.pins {
 		f.hdr[i+8] = &f.cbus.pins[i]
 	}
+	// TODO(maruel): C8 and C9 can be used when their mux in the EEPROM is set to
+	// ft232hCBusIOMode.
 	f.hdr[16] = &invalidPin{num: 16, n: "C8"} // , dp: gpio.PullUp
 	f.hdr[17] = &invalidPin{num: 17, n: "C9"} // , dp: gpio.PullUp
 	f.D0 = f.hdr[0]
@@ -382,6 +384,12 @@ func newFT232H(g generic) (*FT232H, error) {
 // FT232H represents a FT232H device.
 //
 // It implements Dev.
+//
+// The device can be used in a few different modes:
+// - D0~D3 as a serial protocol, supporting I²C and SPI (and eventually UART),
+//   In this mode, D4~D7 and C0~C7 can be used as GPIO.
+// - D0~D7 as a synchronous 8 bits bit-bang port. In this mode, CBus is hardly
+// usable.
 //
 // Each group of pins D0~D7 and C0~C7 can be changed at once in one pass via
 // DBus() or CBus().
@@ -534,7 +542,6 @@ func newFT232R(g generic) (*FT232R, error) {
 			{num: 10, n: "C2", p: gpio.PullUp},
 			{num: 11, n: "C3", p: gpio.Float},
 		},
-		cbus4: invalidPin{num: 12, n: "C4"}, // dp: gpio.Float
 	}
 	for i := range f.dbus {
 		f.dbus[i].bus = f
@@ -544,7 +551,6 @@ func newFT232R(g generic) (*FT232R, error) {
 		f.cbus[i].bus = f
 		f.hdr[i+8] = &f.cbus[i]
 	}
-	f.hdr[12] = &f.cbus4
 	f.D0 = f.hdr[0]
 	f.D1 = f.hdr[1]
 	f.D2 = f.hdr[2]
@@ -565,7 +571,6 @@ func newFT232R(g generic) (*FT232R, error) {
 	f.C1 = f.hdr[9]
 	f.C2 = f.hdr[10]
 	f.C3 = f.hdr[11]
-	f.C4 = f.hdr[12]
 
 	// Default to 3MHz.
 	if err := f.h.setBaudRate(3000000); err != nil {
@@ -573,7 +578,7 @@ func newFT232R(g generic) (*FT232R, error) {
 	}
 
 	// Set all CBus pins as input.
-	if err := f.h.setBitMode(0, 0x20); err != nil {
+	if err := f.h.setBitMode(0, bitModeCbusBitbang); err != nil {
 		return nil, err
 	}
 	// And read their value.
@@ -582,7 +587,7 @@ func newFT232R(g generic) (*FT232R, error) {
 		return nil, err
 	}
 	// Set all DBus as synchronous bitbang, everything as input.
-	if err := f.h.setBitMode(0, 4); err != nil {
+	if err := f.h.setBitMode(0, bitModeSyncBitbang); err != nil {
 		return nil, err
 	}
 	// And read their value.
@@ -606,6 +611,9 @@ func newFT232R(g generic) (*FT232R, error) {
 // SparkFun's version exports all pins *except* (inexplicably) the CBus ones.
 //
 // The FT232R has 128 bytes output buffer and 256 bytes input buffer.
+//
+// Pin C4 can only be used in 'slow' mode via EEPROM and is currently not
+// implemented.
 //
 // Datasheet
 //
@@ -637,12 +645,10 @@ type FT232R struct {
 	C1 gpio.PinIO
 	C2 gpio.PinIO
 	C3 gpio.PinIO
-	C4 gpio.PinIO
 
-	dbus  [8]syncPin
-	cbus  [4]cbusPin
-	cbus4 invalidPin
-	hdr   [13]gpio.PinIO
+	dbus [8]syncPin
+	cbus [4]cbusPin
+	hdr  [12]gpio.PinIO
 
 	// Mutable.
 	mu         sync.Mutex
@@ -656,6 +662,63 @@ func (f *FT232R) Header() []gpio.PinIO {
 	out := make([]gpio.PinIO, len(f.hdr))
 	copy(out, f.hdr[:])
 	return out
+}
+
+// SetDBusMask sets all D0~D7 input or output mode at once.
+//
+// mask is the input/output pins to use. A bit value of 0 sets the
+// corresponding pin to an input, a bit value of 1 sets the corresponding pin
+// to an output.
+//
+// It should be called before calling Tx().
+func (f *FT232R) SetDBusMask(mask uint8) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if mask != f.dmask {
+		if err := f.h.setBitMode(mask, bitModeSyncBitbang); err != nil {
+			return err
+		}
+		f.dmask = mask
+	}
+	return nil
+}
+
+// Tx does synchronized read-then-write on all the D0~D7 GPIOs.
+//
+// SetSpeed() determines the pace at which the I/O is done.
+//
+// SetDBusMask() determines which bits are interpreted in the w and r byte
+// slice. w has its significant value masked by 'mask' and r has its
+// significant value masked by '^mask'.
+//
+// Input sample is done *before* updating outputs. So r[0] is sampled before
+// w[0] is used. The last w byte should be duplicated if an addition read is
+// desired.
+func (f *FT232R) Tx(w, r []byte) error {
+	if len(w) != len(r) {
+		// TODO(maruel): Accept nil for one.
+		return errors.New("d2xx: length of buffer w and r must match")
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	// Chunk into 64 bytes chunks. That's half the buffer size of the chip.
+	// TODO(maruel): Determine what's optimal.
+	const chunk = 64
+	for len(w) != 0 {
+		c := len(w)
+		if c > chunk {
+			c = chunk
+		}
+		if _, err := f.h.write(w[:c]); err != nil {
+			return err
+		}
+		if _, err := f.h.read(r[:c]); err != nil {
+			return err
+		}
+		w = w[c:]
+		r = w[c:]
+	}
+	return nil
 }
 
 func (f *FT232R) syncBusFunc(n int) string {
@@ -679,7 +742,7 @@ func (f *FT232R) syncBusIn(n int) error {
 		return nil
 	}
 	v := f.dmask &^ mask
-	if err := f.h.setBitMode(v, 4); err != nil {
+	if err := f.h.setBitMode(v, bitModeSyncBitbang); err != nil {
 		return err
 	}
 	f.dmask = v
@@ -713,7 +776,7 @@ func (f *FT232R) syncBusOut(n int, l gpio.Level) error {
 	if f.dmask&mask != 1 {
 		// Was input.
 		v := f.dmask | mask
-		if err := f.h.setBitMode(v, 4); err != nil {
+		if err := f.h.setBitMode(v, bitModeSyncBitbang); err != nil {
 			return err
 		}
 		f.dmask = v
@@ -750,7 +813,7 @@ func (f *FT232R) cBusIn(n int) error {
 		return nil
 	}
 	v := f.cbusnibble &^ fmask
-	if err := f.h.setBitMode(v, 0x20); err != nil {
+	if err := f.h.setBitMode(v, bitModeCbusBitbang); err != nil {
 		return err
 	}
 	f.cbusnibble = v
@@ -788,7 +851,7 @@ func (f *FT232R) cBusOut(n int, l gpio.Level) error {
 		// Was already in the right mode.
 		return nil
 	}
-	if err := f.h.setBitMode(v, 0x20); err != nil {
+	if err := f.h.setBitMode(v, bitModeCbusBitbang); err != nil {
 		return err
 	}
 	f.cbusnibble = v
