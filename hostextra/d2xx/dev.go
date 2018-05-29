@@ -9,18 +9,12 @@ import (
 	"strconv"
 	"sync"
 
+	"periph.io/x/extra/hostextra/d2xx/ftdi"
 	"periph.io/x/periph/conn"
 	"periph.io/x/periph/conn/gpio"
 	"periph.io/x/periph/conn/i2c"
 	"periph.io/x/periph/conn/spi"
 )
-
-// Type is the FTDI device type.
-//
-// The value can be "FT232H", "FT232R", etc.
-//
-// An empty string means the type is unknown.
-type Type string
 
 // Info is the information gathered about the connected FTDI device.
 //
@@ -29,7 +23,11 @@ type Info struct {
 	// Opened is true if the device was successfully opened.
 	Opened bool
 	// Type is the FTDI device type.
-	Type Type
+	//
+	// The value can be "FT232H", "FT232R", etc.
+	//
+	// An empty string means the type is unknown.
+	Type string
 	// VenID is the vendor ID from the USB descriptor information. It is expected
 	// to be 0x0403 (FTDI).
 	VenID uint16
@@ -60,9 +58,9 @@ type Dev interface {
 	SetSpeed(hz int64) error
 
 	// EEPROM returns the EEPROM content.
-	EEPROM(ee *EEPROM) error
+	EEPROM(ee *ftdi.EEPROM) error
 	// WriteEEPROM updates the EEPROM. Must be used carefully.
-	WriteEEPROM(ee *EEPROM) error
+	WriteEEPROM(ee *ftdi.EEPROM) error
 	// UserArea reads and return the EEPROM part that can be used to stored user
 	// defined values.
 	UserArea() ([]byte, error)
@@ -102,11 +100,11 @@ func (b *broken) SetSpeed(hz int64) error {
 	return b.err
 }
 
-func (b *broken) EEPROM(ee *EEPROM) error {
+func (b *broken) EEPROM(ee *ftdi.EEPROM) error {
 	return b.err
 }
 
-func (b *broken) WriteEEPROM(ee *EEPROM) error {
+func (b *broken) WriteEEPROM(ee *ftdi.EEPROM) error {
 	return b.err
 }
 
@@ -128,7 +126,7 @@ type generic struct {
 }
 
 func (f *generic) String() string {
-	return string(f.h.t.Type()) + "(" + strconv.Itoa(f.index) + ")"
+	return f.h.t.String() + "(" + strconv.Itoa(f.index) + ")"
 }
 
 // Halt implements conn.Resource.
@@ -141,7 +139,7 @@ func (f *generic) Halt() error {
 // Info returns information about an opened device.
 func (f *generic) Info(i *Info) {
 	i.Opened = true
-	i.Type = f.h.t.Type()
+	i.Type = f.h.t.String()
 	i.VenID = f.h.venID
 	i.DevID = f.h.devID
 }
@@ -156,7 +154,7 @@ func (f *generic) SetSpeed(hz int64) error {
 	return f.h.setBaudRate(hz)
 }
 
-func (f *generic) EEPROM(ee *EEPROM) error {
+func (f *generic) EEPROM(ee *ftdi.EEPROM) error {
 	return f.h.readEEPROM(ee)
 	/*
 		if f.ee.Raw == nil {
@@ -177,7 +175,7 @@ func (f *generic) EEPROM(ee *EEPROM) error {
 	*/
 }
 
-func (f *generic) WriteEEPROM(ee *EEPROM) error {
+func (f *generic) WriteEEPROM(ee *ftdi.EEPROM) error {
 	return f.h.programEEPROM(ee)
 }
 

@@ -27,7 +27,8 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"unsafe"
+
+	"periph.io/x/extra/hostextra/d2xx/ftdi"
 )
 
 // Version returns the version number of the D2xx driver currently used.
@@ -68,7 +69,7 @@ func openDev(i int) (*device, error) {
 // The content of the struct is immutable after initialization.
 type device struct {
 	h     handle
-	t     devType
+	t     ftdi.DevType
 	venID uint16
 	devID uint16
 }
@@ -171,7 +172,7 @@ func (d *device) write(b []byte) (int, error) {
 	return n, toErr("Write", e)
 }
 
-func (d *device) readEEPROM(ee *EEPROM) error {
+func (d *device) readEEPROM(ee *ftdi.EEPROM) error {
 	if e := d.h.d2xxEEPROMRead(d.t, ee); e != 0 {
 		// 15 == FT_EEPROM_NOT_PROGRAMMED
 		if e != 15 {
@@ -185,16 +186,16 @@ func (d *device) readEEPROM(ee *EEPROM) error {
 		//
 		// Fill it with an empty yet valid EEPROM content. We don't want to set
 		// VenID or DevID to 0! Nobody would do that, right?
-		ee.Raw = make([]byte, d.t.eepromSize())
-		hdr := (*eepromHeader)(unsafe.Pointer(&ee.Raw[0]))
-		hdr.deviceType = d.t
+		ee.Raw = make([]byte, d.t.EEPROMSize())
+		hdr := ee.AsHeader()
+		hdr.DeviceType = d.t
 		hdr.VendorID = d.venID
 		hdr.ProductID = d.devID
 	}
 	return nil
 }
 
-func (d *device) programEEPROM(ee *EEPROM) error {
+func (d *device) programEEPROM(ee *ftdi.EEPROM) error {
 	// Verify that the values are set correctly.
 	if len(ee.Manufacturer) > 40 {
 		return errors.New("d2xx: Manufacturer is too long")
@@ -212,8 +213,11 @@ func (d *device) programEEPROM(ee *EEPROM) error {
 		return errors.New("d2xx: length of Manufacturer plus Desc is too long")
 	}
 	if len(ee.Raw) != 0 {
-		hdr := (*eepromHeader)(unsafe.Pointer(&ee.Raw[0]))
-		if hdr.deviceType != d.t {
+		hdr := ee.AsHeader()
+		if hdr == nil {
+			return errors.New("d2xx: unexpected EEPROM header size")
+		}
+		if hdr.DeviceType != d.t {
 			return errors.New("d2xx: unexpected device type set while programming EEPROM")
 		}
 		if hdr.VendorID != d.venID {
@@ -272,77 +276,6 @@ func (d *device) setBaudRate(hz int64) error {
 }
 
 //
-
-// devType is the FTDI device type.
-type devType uint32
-
-const (
-	ftBM devType = iota // 0
-	ftAM
-	ft100AX
-	unknown // 3
-	ft2232C
-	ft232R // 5
-	ft2232H
-	ft4232H
-	ft232H // 8
-	ftXSeries
-	ft4222H0
-	ft4222H1_2
-	ft4222H3
-	ft4222Prog
-	ft900
-	ft930
-	ftUMFTPD3A
-)
-
-func (d devType) Type() Type {
-	switch d {
-	case ftBM:
-		return "FTBM"
-	case ftAM:
-		return "FTAM"
-	case ft100AX:
-		return "FT100AX"
-	case ft2232C:
-		return "FT2232C"
-	case ft232R:
-		return "FT232R"
-	case ft2232H:
-		return "ft2232h"
-	case ft4232H:
-		return "FT4232H"
-	case ft232H:
-		return "FT232H"
-	case ftXSeries:
-		return "FT2NNX"
-	case ft4222H0:
-		return "FT4222H0"
-	case ft4222H1_2:
-		return "FT4222H"
-	case ft4222H3:
-		return "FT4222H3"
-	case ft4222Prog:
-		return "FT4222Prog"
-	default:
-		return "Unknown"
-	}
-}
-
-func (d devType) eepromSize() int {
-	// This data was determined by tracing with a debugger.
-	//
-	// It must not be any other value, like 56 used on posix. ¯\_(ツ)_/¯
-	switch d {
-	case ft232H:
-		return 44
-	case ft232R:
-		return 32
-	default:
-		// TODO(maruel): Figure out.
-		return 56
-	}
-}
 
 const missing = -1
 const noCGO = -2
@@ -432,9 +365,9 @@ func toErr(s string, e int) error {
 type d2xxHandle interface {
 	d2xxClose() int
 	d2xxResetDevice() int
-	d2xxGetDeviceInfo() (devType, uint16, uint16, int)
-	d2xxEEPROMRead(d devType, e *EEPROM) int
-	d2xxEEPROMProgram(e *EEPROM) int
+	d2xxGetDeviceInfo() (ftdi.DevType, uint16, uint16, int)
+	d2xxEEPROMRead(d ftdi.DevType, e *ftdi.EEPROM) int
+	d2xxEEPROMProgram(e *ftdi.EEPROM) int
 	d2xxEEUASize() (int, int)
 	d2xxEEUARead(ua []byte) int
 	d2xxEEUAWrite(ua []byte) int

@@ -13,6 +13,8 @@ package d2xx
 import "C"
 import (
 	"unsafe"
+
+	"periph.io/x/extra/hostextra/d2xx/ftdi"
 )
 
 const disabled = false
@@ -50,38 +52,38 @@ func (h handle) d2xxResetDevice() int {
 	return int(C.FT_ResetDevice(h.toH()))
 }
 
-func (h handle) d2xxGetDeviceInfo() (devType, uint16, uint16, int) {
+func (h handle) d2xxGetDeviceInfo() (ftdi.DevType, uint16, uint16, int) {
 	var dev C.FT_DEVICE
 	var id C.DWORD
 	if e := C.FT_GetDeviceInfo(h.toH(), &dev, &id, nil, nil, nil); e != 0 {
-		return unknown, 0, 0, int(e)
+		return ftdi.Unknown, 0, 0, int(e)
 	}
-	return devType(dev), uint16(id >> 16), uint16(id), 0
+	return ftdi.DevType(dev), uint16(id >> 16), uint16(id), 0
 }
 
-func (h handle) d2xxEEPROMRead(t devType, ee *EEPROM) int {
+func (h handle) d2xxEEPROMRead(t ftdi.DevType, ee *ftdi.EEPROM) int {
 	var manufacturer [64]C.char
 	var manufacturerID [64]C.char
 	var desc [64]C.char
 	var serial [64]C.char
-	if l := t.eepromSize(); len(ee.Raw) < l {
-		ee.Raw = make([]byte, t.eepromSize())
+	if l := t.EEPROMSize(); len(ee.Raw) < l {
+		ee.Raw = make([]byte, l)
 	} else if len(ee.Raw) > l {
 		ee.Raw = ee.Raw[:l]
 	}
 	eepromVoid := unsafe.Pointer(&ee.Raw[0])
-	hdr := (*eepromHeader)(eepromVoid)
+	hdr := ee.AsHeader()
 
 	// There something odd going on here.
 	//
-	// On a ft232h, we observed that hdr.deviceType MUST NOT be set, but on a
+	// On a ft232h, we observed that hdr.DeviceType MUST NOT be set, but on a
 	// ft232r, it MUST be set. Since we can't know in advance what we must use,
 	// just try both. ¯\_(ツ)_/¯
-	hdr.deviceType = t
+	hdr.DeviceType = t
 	if e := C.FT_EEPROM_Read(h.toH(), eepromVoid, C.DWORD(len(ee.Raw)), &manufacturer[0], &manufacturerID[0], &desc[0], &serial[0]); e != 0 {
 		// FT_INVALID_PARAMETER
 		if e == 6 {
-			hdr.deviceType = 0
+			hdr.DeviceType = 0
 			e = C.FT_EEPROM_Read(h.toH(), eepromVoid, C.DWORD(len(ee.Raw)), &manufacturer[0], &manufacturerID[0], &desc[0], &serial[0])
 		}
 		if e != 0 {
@@ -96,7 +98,7 @@ func (h handle) d2xxEEPROMRead(t devType, ee *EEPROM) int {
 	return 0
 }
 
-func (h handle) d2xxEEPROMProgram(ee *EEPROM) int {
+func (h handle) d2xxEEPROMProgram(ee *ftdi.EEPROM) int {
 	// len(manufacturer) + len(desc) <= 40.
 	/*
 		var cmanu [64]byte

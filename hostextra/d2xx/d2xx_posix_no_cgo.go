@@ -7,6 +7,8 @@
 
 package d2xx
 
+import "periph.io/x/extra/hostextra/d2xx/ftdi"
+
 const disabled = true
 
 // Library functions.
@@ -33,15 +35,15 @@ func (h handle) d2xxResetDevice() int {
 	return noCGO
 }
 
-func (h handle) d2xxGetDeviceInfo() (devType, uint16, uint16, int) {
-	return unknown, 0, 0, noCGO
+func (h handle) d2xxGetDeviceInfo() (ftdi.DevType, uint16, uint16, int) {
+	return ftdi.Unknown, 0, 0, noCGO
 }
 
-func (h handle) d2xxEEPROMRead(t devType, ee *EEPROM) int {
+func (h handle) d2xxEEPROMRead(t ftdi.DevType, ee *ftdi.EEPROM) int {
 	return noCGO
 }
 
-func (h handle) d2xxEEPROMProgram(e *EEPROM) int {
+func (h handle) d2xxEEPROMProgram(e *ftdi.EEPROM) int {
 	return noCGO
 }
 

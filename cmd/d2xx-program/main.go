@@ -17,11 +17,12 @@ import (
 	"os"
 
 	"periph.io/x/extra/hostextra/d2xx"
+	"periph.io/x/extra/hostextra/d2xx/ftdi"
 	"periph.io/x/periph/host"
 )
 
 func writeEEPROM(d d2xx.Dev, manufacturer, manufacturerID, desc, serial string) error {
-	ee := d2xx.EEPROM{}
+	ee := ftdi.EEPROM{}
 	if err := d.EEPROM(&ee); err != nil {
 		fmt.Printf("Failed to read EEPROM: %v\n", err)
 	}

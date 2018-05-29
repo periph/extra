@@ -8,6 +8,8 @@ import (
 	"bytes"
 	"syscall"
 	"unsafe"
+
+	"periph.io/x/extra/hostextra/d2xx/ftdi"
 )
 
 var disabled = true
@@ -46,16 +48,16 @@ func (h handle) d2xxResetDevice() int {
 	return int(r1)
 }
 
-func (h handle) d2xxGetDeviceInfo() (devType, uint16, uint16, int) {
-	var d devType
+func (h handle) d2xxGetDeviceInfo() (ftdi.DevType, uint16, uint16, int) {
+	var d ftdi.DevType
 	var id uint32
 	if r1, _, _ := pGetDeviceInfo.Call(h.toH(), uintptr(unsafe.Pointer(&d)), uintptr(unsafe.Pointer(&id)), 0, 0, 0); r1 != 0 {
-		return unknown, 0, 0, int(r1)
+		return ftdi.Unknown, 0, 0, int(r1)
 	}
-	return devType(d), uint16(id >> 16), uint16(id), 0
+	return d, uint16(id >> 16), uint16(id), 0
 }
 
-func (h handle) d2xxEEPROMRead(t devType, ee *EEPROM) int {
+func (h handle) d2xxEEPROMRead(t ftdi.DevType, ee *ftdi.EEPROM) int {
 	var manufacturer [64]byte
 	var manufacturerID [64]byte
 	var desc [64]byte
@@ -66,15 +68,15 @@ func (h handle) d2xxEEPROMRead(t devType, ee *EEPROM) int {
 	de := uintptr(unsafe.Pointer(&desc[0]))
 	s := uintptr(unsafe.Pointer(&serial[0]))
 
-	if l := t.eepromSize(); len(ee.Raw) < l {
-		ee.Raw = make([]byte, t.eepromSize())
+	if l := t.EEPROMSize(); len(ee.Raw) < l {
+		ee.Raw = make([]byte, l)
 	} else if len(ee.Raw) > l {
 		ee.Raw = ee.Raw[:l]
 	}
 	eepromVoid := unsafe.Pointer(&ee.Raw[0])
-	hdr := (*eepromHeader)(eepromVoid)
+	hdr := ee.AsHeader()
 	// It MUST be set here. This is not always the case on posix.
-	hdr.deviceType = t
+	hdr.DeviceType = t
 	if r1, _, _ := pEEPROMRead.Call(h.toH(), uintptr(eepromVoid), uintptr(len(ee.Raw)), m, mi, de, s); r1 != 0 {
 		return int(r1)
 	}
@@ -86,7 +88,7 @@ func (h handle) d2xxEEPROMRead(t devType, ee *EEPROM) int {
 	return 0
 }
 
-func (h handle) d2xxEEPROMProgram(ee *EEPROM) int {
+func (h handle) d2xxEEPROMProgram(ee *ftdi.EEPROM) int {
 	var cmanu [64]byte
 	copy(cmanu[:], ee.Manufacturer)
 	var cmanuID [64]byte

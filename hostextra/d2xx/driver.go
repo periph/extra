@@ -7,6 +7,7 @@ package d2xx
 import (
 	"sync"
 
+	"periph.io/x/extra/hostextra/d2xx/ftdi"
 	"periph.io/x/periph"
 	"periph.io/x/periph/conn/i2c/i2creg"
 	"periph.io/x/periph/conn/pin"
@@ -46,14 +47,14 @@ func open(i int) (Dev, error) {
 	g := generic{index: i, h: *h}
 	// Makes a copy of the generic instance.
 	switch g.h.t {
-	case ft232H:
+	case ftdi.FT232H:
 		f, err := newFT232H(g)
 		if err != nil {
 			h.closeDev()
 			return nil, err
 		}
 		return f, nil
-	case ft232R:
+	case ftdi.FT232R:
 		f, err := newFT232R(g)
 		if err != nil {
 			h.closeDev()
