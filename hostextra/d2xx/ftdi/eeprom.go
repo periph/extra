@@ -156,7 +156,7 @@ func (f FT232rCBusMux) String() string {
 type EEPROMHeader struct {
 	DeviceType     DevType // 0x00 FTxxxx device type to be programmed
 	VendorID       uint16  // 0x04 Defaults to 0x0403; can be changed
-	ProductID      uint16  // 0x06 Defaults to 0x6001 for FT232H/FT232R, relevant value
+	ProductID      uint16  // 0x06 Defaults to 0x6001 for FT232R, 0x6014 for FT232H, relevant value
 	SerNumEnable   uint8   // 0x07 bool Non-zero if serial number to be used
 	Unused0        uint8   // 0x08 For alignment.
 	MaxPower       uint16  // 0x0A 0mA < MaxPower <= 500mA

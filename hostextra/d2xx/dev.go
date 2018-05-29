@@ -32,7 +32,7 @@ type Info struct {
 	// to be 0x0403 (FTDI).
 	VenID uint16
 	// DevID is the product ID from the USB descriptor information. It is
-	// expected to be one of 0x6001, 0x6006 or 0x6010.
+	// expected to be one of 0x6001, 0x6006, 0x6010, 0x6014.
 	DevID uint16
 }
 
@@ -333,12 +333,12 @@ func (f *FT232H) DBusRead() (byte, error) {
 
 // I2C returns an I²C bus over the AD bus.
 //
-// It uses D0, D1 and D2.
+// It uses D0, D1 and D2. This enforces the device to be in MPSEE mode.
 //
-// D0 is SCL. It needs to be pulled up externally.
+// D0 is SCL. It must to be pulled up externally.
 //
 // D1 and D2 are used for SDA. D1 is the output using open drain, D2 is the
-// input. D1 and D2 need to be wired together and pulled up externally.
+// input. D1 and D2 must be wired together and must be pulled up externally.
 //
 // It is recommended to set the mode to ‘245 FIFO’ in the EEPROM of the FT232H.
 //
@@ -369,6 +369,8 @@ func (f *FT232H) I2C() (i2c.BusCloser, error) {
 //
 // It uses D0, D1, D2 and D3. D0 is the clock, D1 the output (MOSI), D2 is the
 // input (MISO) and D3 is CS line.
+//
+// This enforces the device to be in MPSEE mode.
 func (f *FT232H) SPI() (spi.PortCloser, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
