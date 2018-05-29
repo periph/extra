@@ -190,6 +190,12 @@ type Dev interface {
 	// Info returns information about an opened device.
 	Info(i *Info)
 
+	// Header returns the GPIO pins exposed on the chip.
+	Header() []gpio.PinIO
+
+	// SetSpeed sets the base clock for all I/O transactions.
+	SetSpeed(hz int64) error
+
 	// EEPROM returns the EEPROM content.
 	EEPROM(ee *EEPROM) error
 	// WriteEEPROM updates the EEPROM. Must be used carefully.
@@ -201,9 +207,6 @@ type Dev interface {
 	//
 	// If the length of ua is less than the available space, is it zero extended.
 	WriteUserArea(ua []byte) error
-
-	// Header returns the GPIO pins exposed on the chip.
-	Header() []gpio.PinIO
 }
 
 // TODO(maruel): JTAG, Parallel, UART.
@@ -228,6 +231,14 @@ func (b *broken) Info(i *Info) {
 	i.Opened = false
 }
 
+func (b *broken) Header() []gpio.PinIO {
+	return nil
+}
+
+func (b *broken) SetSpeed(hz int64) error {
+	return b.err
+}
+
 func (b *broken) EEPROM(ee *EEPROM) error {
 	return b.err
 }
@@ -242,10 +253,6 @@ func (b *broken) UserArea() ([]byte, error) {
 
 func (b *broken) WriteUserArea(ua []byte) error {
 	return b.err
-}
-
-func (b *broken) Header() []gpio.PinIO {
-	return nil
 }
 
 // generic represents a generic FTDI device.
@@ -281,6 +288,16 @@ func (f *generic) Info(i *Info) {
 	i.DevID = f.h.devID
 }
 
+// Header returns the GPIO pins exposed on the chip.
+func (f *generic) Header() []gpio.PinIO {
+	return nil
+}
+
+func (f *generic) SetSpeed(hz int64) error {
+	// TODO(maruel): When using MPSEE, use the MPSEE command.
+	return f.h.setBaudRate(hz)
+}
+
 func (f *generic) EEPROM(ee *EEPROM) error {
 	return f.h.readEEPROM(ee)
 	/*
@@ -312,11 +329,6 @@ func (f *generic) UserArea() ([]byte, error) {
 
 func (f *generic) WriteUserArea(ua []byte) error {
 	return f.h.writeUA(ua)
-}
-
-// Header returns the GPIO pins exposed on the chip.
-func (f *generic) Header() []gpio.PinIO {
-	return nil
 }
 
 func (f *generic) initialize() error {

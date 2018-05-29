@@ -157,6 +157,11 @@ func (h handle) d2xxSetLatencyTimer(delayMS uint8) int {
 	return int(r1)
 }
 
+func (h handle) d2xxSetBaudRate(hz uint32) int {
+	r1, _, _ := pSetBaudRate.Call(h.toH(), uintptr(hz))
+	return int(r1)
+}
+
 func (h handle) d2xxGetQueueStatus() (uint32, int) {
 	var v uint32
 	r1, _, _ := pGetQueueStatus.Call(h.toH(), uintptr(unsafe.Pointer(&v)))
@@ -207,6 +212,7 @@ var (
 	pOpen                 *syscall.Proc
 	pRead                 *syscall.Proc
 	pResetDevice          *syscall.Proc
+	pSetBaudRate          *syscall.Proc
 	pSetBitMode           *syscall.Proc
 	pSetChars             *syscall.Proc
 	pSetFlowControl       *syscall.Proc
@@ -241,6 +247,7 @@ func init() {
 		pOpen = find("FT_Open")
 		pRead = find("FT_Read")
 		pResetDevice = find("FT_ResetDevice")
+		pSetBaudRate = find("FT_SetBaudRate")
 		pSetBitMode = find("FT_SetBitMode")
 		pSetChars = find("FT_SetChars")
 		pSetFlowControl = find("FT_SetFlowControl")

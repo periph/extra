@@ -293,6 +293,15 @@ func (d *device) writeUA(ua []byte) error {
 	return nil
 }
 
+func (d *device) setBaudRate(hz int64) error {
+	if hz >= 1<<31 {
+		return errors.New("d2xx: baud rate too high")
+	}
+	return toErr("SetBaudRate", d.h.d2xxSetBaudRate(uint32(hz)))
+}
+
+//
+
 // devType is the FTDI device type.
 type devType uint32
 
@@ -550,6 +559,7 @@ type d2xxHandle interface {
 	d2xxSetFlowControl() int
 	d2xxSetTimeouts(readMS, writeMS int) int
 	d2xxSetLatencyTimer(delayMS uint8) int
+	d2xxSetBaudRate(hz uint32) int
 	d2xxGetQueueStatus() (uint32, int)
 	d2xxRead(b []byte) (int, int)
 	d2xxWrite(b []byte) (int, int)

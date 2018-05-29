@@ -177,6 +177,10 @@ func (h handle) d2xxSetLatencyTimer(delayMS uint8) int {
 	return int(C.FT_SetLatencyTimer(h.toH(), C.UCHAR(delayMS)))
 }
 
+func (h handle) d2xxSetBaudRate(hz uint32) int {
+	return int(C.FT_SetBaudRate(h.toH(), C.DWORD(hz)))
+}
+
 func (h handle) d2xxGetQueueStatus() (uint32, int) {
 	var v C.DWORD
 	e := C.FT_GetQueueStatus(h.toH(), &v)

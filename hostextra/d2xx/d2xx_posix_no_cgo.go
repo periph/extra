@@ -77,6 +77,10 @@ func (h handle) d2xxSetLatencyTimer(delayMS uint8) int {
 	return noCGO
 }
 
+func (h handle) d2xxSetBaudRate(hz uint32) int {
+	return noCGO
+}
+
 func (h handle) d2xxGetQueueStatus() (uint32, int) {
 	return 0, noCGO
 }
