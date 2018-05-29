@@ -38,16 +38,28 @@ func open(i int) (Dev, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Make a copy of the handle.
-	g := generic{index: i, h: *h}
-	if err := g.initialize(); err != nil {
+	if err := h.setupCommon(); err != nil {
+		h.closeDev()
 		return nil, err
 	}
+	// Makes a copy of the handle.
+	g := generic{index: i, h: *h}
+	// Makes a copy of the generic instance.
 	switch g.h.t {
 	case ft232H:
-		return newFT232H(g), nil
+		f, err := newFT232H(g)
+		if err != nil {
+			h.closeDev()
+			return nil, err
+		}
+		return f, nil
 	case ft232R:
-		return newFT232R(g), nil
+		f, err := newFT232R(g)
+		if err != nil {
+			h.closeDev()
+			return nil, err
+		}
+		return f, nil
 	default:
 		return &g, nil
 	}

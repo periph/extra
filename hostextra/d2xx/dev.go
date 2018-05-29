@@ -262,11 +262,6 @@ type generic struct {
 	// Immutable after initialization.
 	index int
 	h     device
-
-	// Mutable.
-	initialized bool
-	// ee is a cache of the device's EEPROM content.
-	//ee EEPROM
 }
 
 func (f *generic) String() string {
@@ -331,17 +326,9 @@ func (f *generic) WriteUserArea(ua []byte) error {
 	return f.h.writeUA(ua)
 }
 
-func (f *generic) initialize() error {
-	if err := f.h.initialize(); err != nil {
-		return err
-	}
-	f.initialized = true
-	return nil
-}
-
 //
 
-func newFT232H(g generic) *FT232H {
+func newFT232H(g generic) (*FT232H, error) {
 	f := &FT232H{
 		generic: g,
 		cbus:    gpiosMPSSE{h: &g.h, cbus: true},
@@ -386,7 +373,10 @@ func newFT232H(g generic) *FT232H {
 	f.h.mpsseDBus(0, 0)
 	f.cbus.read()
 	f.dbus.read()
-	return f
+	if err := f.h.setupMPSSE(); err != nil {
+		return nil, err
+	}
+	return f, nil
 }
 
 // FT232H represents a FT232H device.
@@ -529,7 +519,7 @@ func (f *FT232H) SPI() (spi.PortCloser, error) {
 
 //
 
-func newFT232R(g generic) *FT232R {
+func newFT232R(g generic) (*FT232R, error) {
 	f := &FT232R{
 		generic: g,
 		pins: [...]invalidPin{
@@ -564,7 +554,15 @@ func newFT232R(g generic) *FT232R {
 	f.C2 = f.hdr[10]
 	f.C3 = f.hdr[11]
 	f.C4 = f.hdr[12]
-	return f
+	// Synchronous bitbang.
+	if err := f.h.setBitMode(0, 4); err != nil {
+		return nil, err
+	}
+	// Default to 3MHz.
+	if err := f.h.setBaudRate(3000000); err != nil {
+		return nil, err
+	}
+	return f, nil
 }
 
 // FT232R represents a FT232RL/FT232RQ device.

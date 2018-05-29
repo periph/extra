@@ -78,25 +78,6 @@ func (d *device) closeDev() error {
 	return toErr("Close", d.h.d2xxClose())
 }
 
-func (d *device) initialize() error {
-	if err := d.setupCommon(); err != nil {
-		return err
-	}
-	switch d.t {
-	case ft232H, ft2232H, ft4232H: // ft2232
-		if err := d.setupMPSSE(); err != nil {
-			return err
-		}
-	case ft232R:
-		// Asynchronous bitbang
-		if err := d.setBitMode(0, 1); err != nil {
-			return err
-		}
-	default:
-	}
-	return nil
-}
-
 // setupCommon is the general setup for common devices.
 //
 // It configures the device itself, the D2XX communication
@@ -166,7 +147,7 @@ func (d *device) getBitMode() (byte, error) {
 //  0x08 MCU host bus emulation mode (ft232h, ft2232, ft2232h, ft4232h)
 //  0x10 Fast opto-isolated serial mode (ft232h, ft2232, ft2232h, ft4232h)
 //  0x20 CBus bit bang mode (ft232h and ft232r)
-//  0x40 Single channel synchrnous 245 fifo mode (ft232h and ft2232h)
+//  0x40 Single channel synchronous 245 fifo mode (ft232h and ft2232h)
 func (d *device) setBitMode(mask, mode byte) error {
 	return toErr("SetBitMode", d.h.d2xxSetBitMode(mask, mode))
 }
