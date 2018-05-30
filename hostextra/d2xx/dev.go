@@ -61,6 +61,8 @@ type Dev interface {
 	EEPROM(ee *ftdi.EEPROM) error
 	// WriteEEPROM updates the EEPROM. Must be used carefully.
 	WriteEEPROM(ee *ftdi.EEPROM) error
+	// EraseEEPROM erases the EEPROM. Must be used carefully.
+	EraseEEPROM() error
 	// UserArea reads and return the EEPROM part that can be used to stored user
 	// defined values.
 	UserArea() ([]byte, error)
@@ -108,6 +110,10 @@ func (b *broken) WriteEEPROM(ee *ftdi.EEPROM) error {
 	return b.err
 }
 
+func (b *broken) EraseEEPROM() error {
+	return b.err
+}
+
 func (b *broken) UserArea() ([]byte, error) {
 	return nil, b.err
 }
@@ -151,6 +157,7 @@ func (f *generic) Header() []gpio.PinIO {
 
 func (f *generic) SetSpeed(hz int64) error {
 	// TODO(maruel): When using MPSEE, use the MPSEE command.
+	// TODO(maruel): Doc says the actual speed is 16x, confirm.
 	return f.h.setBaudRate(hz)
 }
 
@@ -176,7 +183,14 @@ func (f *generic) EEPROM(ee *ftdi.EEPROM) error {
 }
 
 func (f *generic) WriteEEPROM(ee *ftdi.EEPROM) error {
+	// TODO(maruel): Compare with the cached EEPROM, and only update the
+	// different values if needed so reduce the EEPROM wear.
+	// f.h.h.d2xxWriteEE()
 	return f.h.programEEPROM(ee)
+}
+
+func (f *generic) EraseEEPROM() error {
+	return f.h.eraseEEPROM()
 }
 
 func (f *generic) UserArea() ([]byte, error) {
@@ -303,6 +317,14 @@ func (f *FT232H) Header() []gpio.PinIO {
 	out := make([]gpio.PinIO, len(f.hdr))
 	copy(out, f.hdr[:])
 	return out
+}
+
+func (f *FT232H) SetSpeed(hz int64) error {
+	// TODO(maruel): When using MPSEE, use the MPSEE command. If using sync
+	// bit-bang, use setBaudRate().
+
+	// TODO(maruel): Doc says the actual speed is 16x, confirm.
+	return f.h.setBaudRate(hz)
 }
 
 // CBus sets the values of C0 to C7 in the specified direction and value.
@@ -447,6 +469,9 @@ func newFT232R(g generic) (*FT232R, error) {
 		return nil, err
 	}
 	// And read their value.
+	// TODO(maruel): Sadly this is impossible to know which pin is input or
+	// output, but we could try to guess, as the call above may generate noise on
+	// the line which could interfere with the device connected.
 	var err error
 	if f.cbusnibble, err = f.h.getBitMode(); err != nil {
 		return nil, err

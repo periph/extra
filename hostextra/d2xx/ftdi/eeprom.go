@@ -44,6 +44,15 @@ func (e *EEPROM) AsFT232H() *EEPROMFT232H {
 	return (*EEPROMFT232H)(unsafe.Pointer(&e.Raw[0]))
 }
 
+// AsFT2232H returns the Raw data aliased as EEPROMFT2232H.
+func (e *EEPROM) AsFT2232H() *EEPROMFT2232H {
+	// sizeof(EEPROMFT2232H)
+	if len(e.Raw) < 40 {
+		return nil
+	}
+	return (*EEPROMFT2232H)(unsafe.Pointer(&e.Raw[0]))
+}
+
 // AsFT232R returns the Raw data aliased as EEPROMFT232R.
 func (e *EEPROM) AsFT232R() *EEPROMFT232R {
 	// sizeof(EEPROMFT232R)
@@ -175,10 +184,10 @@ type EEPROMFT232H struct {
 	// FT232H specific.
 	ACSlowSlew        uint8         // 0x10 bool Non-zero if AC bus pins have slow slew
 	ACSchmittInput    uint8         // 0x11 bool Non-zero if AC bus pins are Schmitt input
-	ACDriveCurrent    uint8         // 0x12 Valid values are 4mA, 8mA, 12mA, 16mA
+	ACDriveCurrent    uint8         // 0x12 Valid values are 4mA, 8mA, 12mA, 16mA in 2mA units
 	ADSlowSlew        uint8         // 0x13 bool Non-zero if AD bus pins have slow slew
 	ADSchmittInput    uint8         // 0x14 bool Non-zero if AD bus pins are Schmitt input
-	ADDriveCurrent    uint8         // 0x15 Valid values are 4mA, 8mA, 12mA, 16mA
+	ADDriveCurrent    uint8         // 0x15 Valid values are 4mA, 8mA, 12mA, 16mA in 2mA units
 	Cbus0             FT232hCBusMux // 0x16
 	Cbus1             FT232hCBusMux // 0x17
 	Cbus2             FT232hCBusMux // 0x18
@@ -200,6 +209,54 @@ type EEPROMFT232H struct {
 	DriverType        uint8         // 0x28 bool 0 is D2XX, 1 is VCP
 	Unused2           uint8         // 0x29
 	Unused3           uint16        // 0x30
+}
+
+func (e *EEPROMFT232H) Defaults() {
+	// As found on Adafruit device.
+	e.ACDriveCurrent = 4
+	e.ADDriveCurrent = 4
+	e.Cbus0 = FT232hCBusTristatePullUp
+	e.Cbus1 = FT232hCBusTristatePullUp
+	e.Cbus2 = FT232hCBusTristatePullUp
+	e.Cbus3 = FT232hCBusTristatePullUp
+	e.Cbus4 = FT232hCBusTristatePullUp
+	e.Cbus5 = FT232hCBusTristatePullUp
+	e.Cbus6 = FT232hCBusTristatePullUp
+	e.Cbus7 = FT232hCBusTristatePullUp
+	e.Cbus8 = FT232hCBusDrive1
+	e.Cbus9 = FT232hCBusDrive0
+}
+
+// EEPROMFT2232H is the EEPROM layout of a FT2232H device.
+//
+// It is 40 bytes long.
+type EEPROMFT2232H struct {
+	EEPROMHeader
+
+	// FT232H specific.
+	ALSlowSlew      uint8  // 0x10 bool non-zero if AL pins have slow slew
+	ALSchmittInput  uint8  // 0x11 bool non-zero if AL pins are Schmitt input
+	ALDriveCurrent  uint8  // 0x12 Valid values are 4mA, 8mA, 12mA, 16mA in 2mA units
+	AHSlowSlew      uint8  // 0x13 bool non-zero if AH pins have slow slew
+	AHSchmittInput  uint8  // 0x14 bool non-zero if AH pins are Schmitt input
+	AHDriveCurrent  uint8  // 0x15 Valid values are 4mA, 8mA, 12mA, 16mA in 2mA units
+	BLSlowSlew      uint8  // 0x16 bool non-zero if BL pins have slow slew
+	BLSchmittInput  uint8  // 0x17 bool non-zero if BL pins are Schmitt input
+	BLDriveCurrent  uint8  // 0x18 Valid values are 4mA, 8mA, 12mA, 16mA in 2mA units
+	BHSlowSlew      uint8  // 0x19 bool non-zero if BH pins have slow slew
+	BHSchmittInput  uint8  // 0x1A bool non-zero if BH pins are Schmitt input
+	BHDriveCurrent  uint8  // 0x1B Valid values are 4mA, 8mA, 12mA, 16mA in 2mA units
+	AIsFifo         uint8  // 0x1C bool non-zero if interface is 245 FIFO
+	AIsFifoTar      uint8  // 0x1D bool non-zero if interface is 245 FIFO CPU target
+	AIsFastSer      uint8  // 0x1E bool non-zero if interface is Fast serial
+	BIsFifo         uint8  // 0x1F bool non-zero if interface is 245 FIFO
+	BIsFifoTar      uint8  // 0x20 bool non-zero if interface is 245 FIFO CPU target
+	BIsFastSer      uint8  // 0x21 bool non-zero if interface is Fast serial
+	PowerSaveEnable uint8  // 0x22 bool non-zero if using BCBUS7 to save power for self-powered designs
+	ADriverType     uint8  // 0x23 bool
+	BDriverType     uint8  // 0x24 bool
+	Unused2         uint8  // 0x25
+	Unused3         uint16 // 0x26
 }
 
 // EEPROMFT232R is the EEPROM layout of a FT232R device.
@@ -225,6 +282,16 @@ type EEPROMFT232R struct {
 	Cbus3         FT232rCBusMux // 0x1D Default ft232rCBusPwrEnable
 	Cbus4         FT232rCBusMux // 0x1E Default ft232rCBusSleep
 	DriverType    uint8         // 0x1F bool 0 is D2XX, 1 is VCP
+}
+
+func (e *EEPROMFT232R) Defaults() {
+	// As found on Adafruit device.
+	e.Cbus0 = FT232rCBusTxLED
+	e.Cbus1 = FT232rCBusRxLED
+	e.Cbus2 = FT232rCBusTxdEnable
+	e.Cbus3 = FT232rCBusPwrEnable
+	e.Cbus4 = FT232rCBusSleep
+	e.DriverType = 1
 }
 
 //
@@ -254,19 +321,18 @@ const (
 
 // EEPROMSize returns the size of the EEPROM for this device.
 func (d DevType) EEPROMSize() int {
-	// This data was determined by tracing with a debugger.
-	//
-	// It must not be any other value, like 56 used on posix. ¯\_(ツ)_/¯
 	switch d {
 	case FT232H:
 		// sizeof(EEPROMFT232H)
 		return 44
+	case FT2232H:
+		// sizeof(EEPROMFT2232H)
+		return 40
 	case FT232R:
 		// sizeof(EEPROMFT232R)
 		return 32
 	default:
-		// TODO(maruel): Figure out.
-		return 56
+		return 256
 	}
 }
 

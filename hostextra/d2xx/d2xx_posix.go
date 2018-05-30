@@ -125,6 +125,14 @@ func (h handle) d2xxEEPROMProgram(ee *ftdi.EEPROM) int {
 	return int(C.FT_EEPROM_Program(h.toH(), unsafe.Pointer(&ee.Raw[0]), C.DWORD(len(ee.Raw)), cmanu, cmanuID, cdesc, cserial))
 }
 
+func (h handle) d2xxEraseEE() int {
+	return int(C.FT_EraseEE(h.toH()))
+}
+
+func (h handle) d2xxWriteEE(offset uint8, value uint16) int {
+	return int(C.FT_WriteEE(h.toH(), C.DWORD(offset), C.WORD(value)))
+}
+
 func (h handle) d2xxEEUASize() (int, int) {
 	var size C.DWORD
 	if e := C.FT_EE_UASize(h.toH(), &size); e != 0 {

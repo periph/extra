@@ -101,6 +101,16 @@ func (h handle) d2xxEEPROMProgram(ee *ftdi.EEPROM) int {
 	return int(r1)
 }
 
+func (h handle) d2xxEraseEE() int {
+	r1, _, _ := pEraseEE.Call(h.toH())
+	return int(r1)
+}
+
+func (h handle) d2xxWriteEE(offset uint8, value uint16) int {
+	r1, _, _ := pWriteEE.Call(h.toH(), uintptr(offset), uintptr(value))
+	return int(r1)
+}
+
 func (h handle) d2xxEEUASize() (int, int) {
 	var size uint32
 	if r1, _, _ := pEEUASize.Call(h.toH(), uintptr(unsafe.Pointer(&size))); r1 != 0 {
@@ -204,6 +214,8 @@ var (
 	pCreateDeviceInfoList *syscall.Proc
 	pEEPROMRead           *syscall.Proc
 	pEEPROMProgram        *syscall.Proc
+	pEraseEE              *syscall.Proc
+	pWriteEE              *syscall.Proc
 	pEEUASize             *syscall.Proc
 	pEEUARead             *syscall.Proc
 	pEEUAWrite            *syscall.Proc
@@ -239,6 +251,8 @@ func init() {
 		pCreateDeviceInfoList = find("FT_CreateDeviceInfoList")
 		pEEPROMRead = find("FT_EEPROM_Read")
 		pEEPROMProgram = find("FT_EEPROM_Program")
+		pEraseEE = find("FT_EraseEE")
+		pWriteEE = find("FT_WriteEE")
 		pEEUASize = find("FT_EE_UASize")
 		pEEUARead = find("FT_EE_UARead")
 		pEEUAWrite = find("FT_EE_UAWrite")

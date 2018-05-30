@@ -36,6 +36,7 @@ func writeEEPROM(d d2xx.Dev, manufacturer, manufacturerID, desc, serial string) 
 
 func mainImpl() error {
 	verbose := flag.Bool("v", false, "verbose mode")
+	erase := flag.Bool("e", false, "erases the EEPROM instead of programming it")
 	manufacturer := flag.String("m", "", "manufacturer")
 	manufacturerID := flag.String("mid", "", "manufacturer ID")
 	desc := flag.String("d", "", "description")
@@ -51,13 +52,19 @@ func mainImpl() error {
 	if flag.NArg() != 0 {
 		return errors.New("unexpected argument, try -help")
 	}
-	if *ua == "" {
-		if *manufacturer == "" || *manufacturerID == "" || *desc == "" || *serial == "" {
-			return errors.New("all of -m, -mid, -d and -s are required, or use -ua")
+	if *erase {
+		if *ua != "" || *manufacturer != "" || *manufacturerID != "" || *desc != "" || *serial != "" {
+			return errors.New("-e cannot be used with any of -m, -mid, -d, -s, -ua")
 		}
 	} else {
-		if *manufacturer != "" || *manufacturerID != "" || *desc != "" || *serial != "" {
-			return errors.New("all of -m, -mid, -d and -s cannot be used with -ua")
+		if *ua == "" {
+			if *manufacturer == "" || *manufacturerID == "" || *desc == "" || *serial == "" {
+				return errors.New("all of -m, -mid, -d and -s are required, or use -ua")
+			}
+		} else {
+			if *manufacturer != "" || *manufacturerID != "" || *desc != "" || *serial != "" {
+				return errors.New("all of -m, -mid, -d and -s cannot be used with -ua")
+			}
 		}
 	}
 
@@ -76,6 +83,9 @@ func mainImpl() error {
 	}
 	d := all[0]
 
+	if *erase {
+		return d.EraseEEPROM()
+	}
 	if *ua == "" {
 		return writeEEPROM(d, *manufacturer, *manufacturerID, *desc, *serial)
 	}

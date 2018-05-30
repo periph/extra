@@ -47,6 +47,14 @@ func (h handle) d2xxEEPROMProgram(e *ftdi.EEPROM) int {
 	return noCGO
 }
 
+func (h handle) d2xxEraseEE() int {
+	return noCGO
+}
+
+func (h handle) d2xxWriteEE(offset uint8, value uint16) int {
+	return noCGO
+}
+
 func (h handle) d2xxEEUASize() (int, int) {
 	return 0, noCGO
 }

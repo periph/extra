@@ -86,6 +86,8 @@ func (d *device) closeDev() error {
 // between all 3.
 func (d *device) setupCommon() error {
 	// Device: reset the device completely so it becomes in a known state.
+	// TODO(maruel): It may not be really required, especially that this likely
+	// trigger spurious I/O.
 	if err := d.reset(); err != nil {
 		return err
 	}
@@ -230,6 +232,12 @@ func (d *device) programEEPROM(ee *ftdi.EEPROM) error {
 	return toErr("EEPROMWrite", d.h.d2xxEEPROMProgram(ee))
 }
 
+func (d *device) eraseEEPROM() error {
+	// Will fail on FT232R and FT245R. Not checking here, the driver will report
+	// an error.
+	return toErr("EraseEE", d.h.d2xxEraseEE())
+}
+
 func (d *device) readUA() ([]byte, error) {
 	size, e := d.h.d2xxEEUASize()
 	if e != 0 {
@@ -368,6 +376,8 @@ type d2xxHandle interface {
 	d2xxGetDeviceInfo() (ftdi.DevType, uint16, uint16, int)
 	d2xxEEPROMRead(d ftdi.DevType, e *ftdi.EEPROM) int
 	d2xxEEPROMProgram(e *ftdi.EEPROM) int
+	d2xxEraseEE() int
+	d2xxWriteEE(offset uint8, value uint16) int
 	d2xxEEUASize() (int, int)
 	d2xxEEUARead(ua []byte) int
 	d2xxEEUAWrite(ua []byte) int
