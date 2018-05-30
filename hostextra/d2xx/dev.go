@@ -253,6 +253,8 @@ func newFT232H(g generic) (*FT232H, error) {
 	if err := f.h.setupMPSSE(); err != nil {
 		return nil, err
 	}
+	f.s.c.f = f
+	f.i.f = f
 	return f, nil
 }
 
@@ -309,7 +311,9 @@ type FT232H struct {
 	usingI2C bool
 	usingSPI bool
 	i        i2cBus
-	s        spiPort
+	s        spiMPSEEPort
+	// TODO(maruel): Technically speaking, a SPI port could be hacked up too in
+	// sync bit-bang but there's less point when MPSEE is available.
 }
 
 // Header returns the GPIO pins exposed on the chip.
@@ -379,7 +383,6 @@ func (f *FT232H) I2C() (i2c.BusCloser, error) {
 	if f.usingSPI {
 		return nil, errors.New("d2xx: already using SPI")
 	}
-	f.i.f = f
 	if err := f.i.setupI2C(); err != nil {
 		f.i.stopI2C()
 		return nil, err
@@ -404,7 +407,6 @@ func (f *FT232H) SPI() (spi.PortCloser, error) {
 	}
 	// Don't mark it as being used yet. It only become used once Connect() is
 	// called.
-	f.s.f = f
 	return &f.s, nil
 }
 
@@ -486,6 +488,7 @@ func newFT232R(g generic) (*FT232R, error) {
 		return nil, err
 	}
 	f.dvalue = b[0]
+	f.s.c.f = f
 	return f, nil
 }
 
@@ -542,6 +545,8 @@ type FT232R struct {
 
 	// Mutable.
 	mu         sync.Mutex
+	usingSPI   bool
+	s          spiSyncPort
 	dmask      uint8 // 0 input, 1 output
 	dvalue     uint8
 	cbusnibble uint8 // upper nibble is I/O control, lower nibble is values.
@@ -564,6 +569,9 @@ func (f *FT232R) Header() []gpio.PinIO {
 func (f *FT232R) SetDBusMask(mask uint8) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.usingSPI {
+		return errors.New("d2xx: already using SPI")
+	}
 	if mask != f.dmask {
 		if err := f.h.setBitMode(mask, bitModeSyncBitbang); err != nil {
 			return err
@@ -584,6 +592,9 @@ func (f *FT232R) SetDBusMask(mask uint8) error {
 // Input sample is done *before* updating outputs. So r[0] is sampled before
 // w[0] is used. The last w byte should be duplicated if an addition read is
 // desired.
+//
+// On the Adafruit cable, only the first 4 bits D0(TX), D1(RX), D2(RTS) and
+// D3(CTS) are connected. This is just enough to create a full duplex SPI bus!
 func (f *FT232R) Tx(w, r []byte) error {
 	if len(w) != len(r) {
 		// TODO(maruel): Accept nil for one.
@@ -591,6 +602,9 @@ func (f *FT232R) Tx(w, r []byte) error {
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.usingSPI {
+		return errors.New("d2xx: already using SPI")
+	}
 	// Chunk into 64 bytes chunks. That's half the buffer size of the chip.
 	// TODO(maruel): Determine what's optimal.
 	const chunk = 64
@@ -611,11 +625,29 @@ func (f *FT232R) Tx(w, r []byte) error {
 	return nil
 }
 
+// SPI returns a SPI port over the first 4 pins.
+//
+// It uses D0(TX), D1(RX), D2(RTS) and D3(CTS). D2(RTS) is the clock, D0(TX)
+// the output (MOSI), D1(RX) is the input (MISO) and D3(CTS) is CS line.
+func (f *FT232R) SPI() (spi.PortCloser, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.usingSPI {
+		return nil, errors.New("d2xx: already using SPI")
+	}
+	// Don't mark it as being used yet. It only become used once Connect() is
+	// called.
+	return &f.s, nil
+}
+
 func (f *FT232R) syncBusFunc(n int) string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	// TODO(maruel): Once UART is supported:
-	//func := []string{"TX", "RX", "RTS", "CTS", "DTR", "DSR", "DCD", "RI"}
+	// func := []string{"TX", "RX", "RTS", "CTS", "DTR", "DSR", "DCD", "RI"}
+	// if f.usingSPI {
+	//   func := []string{"SPI_MOSI", "SPI_MISO", "SPI_CLK", "SPI_CS", ...}
+	// }
 	mask := uint8(1 << uint(n))
 	if f.dmask&mask != 0 {
 		return "Out/" + gpio.Level(f.dvalue&mask != 0).String()
@@ -626,6 +658,7 @@ func (f *FT232R) syncBusFunc(n int) string {
 func (f *FT232R) syncBusIn(n int) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	// TODO(maruel): if usingSPI && n < 4.
 	mask := uint8(1 << uint(n))
 	if f.dmask&mask == 0 {
 		// Already input.
