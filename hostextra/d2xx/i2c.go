@@ -48,10 +48,10 @@ func (d *i2cBus) String() string {
 // SetSpeed implements i2c.Bus.
 func (d *i2cBus) SetSpeed(f physic.Frequency) error {
 	if f > 10*physic.MegaHertz {
-		return nil, fmt.Errorf("d2xx: invalid speed %s; maximum supported clock is 10MHz", f)
+		return fmt.Errorf("d2xx: invalid speed %s; maximum supported clock is 10MHz", f)
 	}
 	if f < 100*physic.Hertz {
-		return nil, fmt.Errorf("d2xx: invalid speed %s; minimum supported clock is 100Hz; did you forget to multiply by physic.KiloHertz?", f)
+		return fmt.Errorf("d2xx: invalid speed %s; minimum supported clock is 100Hz; did you forget to multiply by physic.KiloHertz?", f)
 	}
 	// TODO(maruel): Use proper mpsse command.
 	clk := ((30 * physic.MegaHertz / f) - 1) * 2 / 3
