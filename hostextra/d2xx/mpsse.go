@@ -503,7 +503,7 @@ func (g *gpioMPSSE) WaitForEdge(t time.Duration) bool {
 	return false
 }
 
-// DefaultPull implements gpio.PinDefaultPull.
+// DefaultPull implements gpio.PinIn.
 func (g *gpioMPSSE) DefaultPull() gpio.Pull {
 	return g.dp
 }

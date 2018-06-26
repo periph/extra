@@ -79,7 +79,7 @@ func (s *syncPin) WaitForEdge(t time.Duration) bool {
 	return false
 }
 
-// DefaultPull implements gpio.PinDefaultPull.
+// DefaultPull implements gpio.PinIn.
 func (s *syncPin) DefaultPull() gpio.Pull {
 	// 200kΩ
 	// http://www.ftdichip.com/Support/Documents/DataSheets/ICs/DS_FT232R.pdf
@@ -186,7 +186,7 @@ func (c *cbusPin) WaitForEdge(t time.Duration) bool {
 	return false
 }
 
-// DefaultPull implements gpio.PinDefaultPull.
+// DefaultPull implements gpio.PinIn.
 func (c *cbusPin) DefaultPull() gpio.Pull {
 	// 200kΩ
 	// http://www.ftdichip.com/Support/Documents/DataSheets/ICs/DS_FT232R.pdf
