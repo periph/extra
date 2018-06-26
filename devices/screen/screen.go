@@ -19,7 +19,7 @@ import (
 
 	"github.com/maruel/ansi256"
 	"github.com/mattn/go-colorable"
-	"periph.io/x/periph/devices"
+	"periph.io/x/periph/conn/display"
 )
 
 // Dev is a 1D LED strip emulator that outputs to the console.
@@ -45,7 +45,7 @@ func (d *Dev) String() string {
 	return "Screen"
 }
 
-// Halt implements devices.Device.
+// Halt implements conn.Resource.
 //
 // It clears the display so it is not corrupted.
 func (d *Dev) Halt() error {
@@ -65,18 +65,18 @@ func (d *Dev) Write(pixels []byte) (int, error) {
 	return d.refresh()
 }
 
-// ColorModel implements devices.Display.
+// ColorModel implements display.Drawer.
 func (d *Dev) ColorModel() color.Model {
 	return color.NRGBAModel
 }
 
-// Bounds implements devices.Display.
+// Bounds implements display.Drawer.
 func (d *Dev) Bounds() image.Rectangle {
 	return image.Rectangle{Max: image.Point{X: d.l, Y: 1}}
 }
 
-// Draw implements devices.Display.
-func (d *Dev) Draw(r image.Rectangle, src image.Image, sp image.Point) {
+// Draw implements display.Drawer.
+func (d *Dev) Draw(r image.Rectangle, src image.Image, sp image.Point) error {
 	r = r.Intersect(d.Bounds())
 	srcR := src.Bounds()
 	srcR.Min = srcR.Min.Add(sp)
@@ -96,7 +96,8 @@ func (d *Dev) Draw(r image.Rectangle, src image.Image, sp image.Point) {
 		d.pixels[dX3+1] = byte(g16 >> 8)
 		d.pixels[dX3+2] = byte(b16 >> 8)
 	}
-	d.refresh()
+	_, err := d.refresh()
+	return err
 }
 
 func (d *Dev) refresh() (int, error) {
@@ -111,5 +112,5 @@ func (d *Dev) refresh() (int, error) {
 	return len(d.pixels), err
 }
 
-var _ devices.Display = &Dev{}
+var _ display.Drawer = &Dev{}
 var _ fmt.Stringer = &Dev{}

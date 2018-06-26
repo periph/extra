@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"periph.io/x/periph/conn/gpio"
+	"periph.io/x/periph/conn/physic"
 )
 
 const (
@@ -515,6 +516,11 @@ func (g *gpioMPSSE) Pull() gpio.Pull {
 // Out implements gpio.PinOut.
 func (g *gpioMPSSE) Out(l gpio.Level) error {
 	return g.a.out(g.num, l)
+}
+
+// PWM implements gpio.PinOut.
+func (g *gpioMPSSE) PWM(d gpio.Duty, f physic.Frequency) error {
+	return errors.New("d2xx: not implemented")
 }
 
 /*

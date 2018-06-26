@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"periph.io/x/periph/conn/gpio"
+	"periph.io/x/periph/conn/physic"
 )
 
 // http://www.ftdichip.com/Support/Documents/AppNotes/AN_232R-01_Bit_Bang_Mode_Available_For_FT232R_and_Ft245R.pdf
@@ -94,6 +95,11 @@ func (s *syncPin) Pull() gpio.Pull {
 // Out implements gpio.PinOut.
 func (s *syncPin) Out(l gpio.Level) error {
 	return s.bus.syncBusOut(s.num, l)
+}
+
+// PWM implements gpio.PinOut.
+func (s *syncPin) PWM(d gpio.Duty, f physic.Frequency) error {
+	return errors.New("d2xx: not implemented")
 }
 
 /*
@@ -196,6 +202,11 @@ func (c *cbusPin) Pull() gpio.Pull {
 // Out implements gpio.PinOut.
 func (c *cbusPin) Out(l gpio.Level) error {
 	return c.bus.cBusOut(c.num, l)
+}
+
+// PWM implements gpio.PinOut.
+func (c *cbusPin) PWM(d gpio.Duty, f physic.Frequency) error {
+	return errors.New("d2xx: not implemented")
 }
 
 /*

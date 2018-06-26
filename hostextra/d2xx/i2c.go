@@ -20,6 +20,7 @@ import (
 	"periph.io/x/periph/conn"
 	"periph.io/x/periph/conn/gpio"
 	"periph.io/x/periph/conn/i2c"
+	"periph.io/x/periph/conn/physic"
 )
 
 type i2cBus struct {
@@ -44,8 +45,8 @@ func (d *i2cBus) String() string {
 }
 
 // SetSpeed implements i2c.Bus.
-func (d *i2cBus) SetSpeed(hz int64) error {
-	clk := ((30000000 / hz) - 1) * 2 / 3
+func (d *i2cBus) SetSpeed(f physic.Frequency) error {
+	clk := ((30 * physic.MegaHertz / f) - 1) * 2 / 3
 	cmd := [...]byte{
 		clock30MHz, byte(clk), byte(clk >> 8),
 	}
@@ -94,8 +95,8 @@ func (d *i2cBus) SDA() gpio.PinIO {
 
 func (d *i2cBus) setupI2C() error {
 	// Initialize MPSSE to a known state.
-	hz := 100000
-	clk := ((30000000 / hz) - 1) * 2 / 3
+	f := 100 * physic.KiloHertz
+	clk := ((30 * physic.MegaHertz / f) - 1) * 2 / 3
 	cmd := [...]byte{
 		clock3Phase,
 		dataTristate, 0x07, 0x00,

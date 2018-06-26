@@ -101,6 +101,10 @@ func (d *driver) Prerequisites() []string {
 	return nil
 }
 
+func (d *driver) After() []string {
+	return nil
+}
+
 func (d *driver) Init() (bool, error) {
 	num, err := numDevices()
 	if err != nil {

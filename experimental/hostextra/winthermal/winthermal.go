@@ -62,6 +62,10 @@ func (d *driver) String() string {
 	return "winthermal"
 }
 
+func (d *driver) After() []string {
+	return nil
+}
+
 func (d *driver) Prerequisites() []string {
 	return nil
 }

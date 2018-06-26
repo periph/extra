@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"periph.io/x/periph/conn/gpio"
+	"periph.io/x/periph/conn/physic"
 )
 
 // invalidPin is a non-working (not implemented) pin on a FTDI device.
@@ -66,8 +67,18 @@ func (p *invalidPin) Pull() gpio.Pull {
 	return gpio.PullNoChange
 }
 
+// DefaultPull implements gpio.PinIn.
+func (p *invalidPin) DefaultPull() gpio.Pull {
+	return gpio.PullNoChange
+}
+
 // Out implements gpio.PinOut.
 func (p *invalidPin) Out(l gpio.Level) error {
+	return errors.New("d2xx: to be implemented")
+}
+
+// PWM implements gpio.PinOut.
+func (p *invalidPin) PWM(d gpio.Duty, f physic.Frequency) error {
 	return errors.New("d2xx: to be implemented")
 }
 

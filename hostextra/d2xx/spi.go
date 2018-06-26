@@ -17,6 +17,7 @@ import (
 
 	"periph.io/x/periph/conn"
 	"periph.io/x/periph/conn/gpio"
+	"periph.io/x/periph/conn/physic"
 	"periph.io/x/periph/conn/spi"
 )
 
@@ -26,7 +27,7 @@ type spiMPSEEPort struct {
 	c spiMPSEEConn
 
 	// Mutable.
-	maxHz int64
+	maxFreq physic.Frequency
 }
 
 func (s *spiMPSEEPort) Close() error {
@@ -41,11 +42,11 @@ func (s *spiMPSEEPort) String() string {
 }
 
 // Connect implements spi.Port.
-func (s *spiMPSEEPort) Connect(maxHz int64, m spi.Mode, bits int) (spi.Conn, error) {
-	if maxHz > 30000000 {
+func (s *spiMPSEEPort) Connect(f physic.Frequency, m spi.Mode, bits int) (spi.Conn, error) {
+	if f > 30*physic.MegaHertz {
 		return nil, errors.New("d2xx: maximum supported clock is 30MHz")
 	}
-	if maxHz < 100 {
+	if f < 100*physic.Hertz {
 		return nil, errors.New("d2xx: minimum supported clock is 100Hz")
 	}
 	if bits&7 != 0 {
@@ -71,11 +72,11 @@ func (s *spiMPSEEPort) Connect(maxHz int64, m spi.Mode, bits int) (spi.Conn, err
 
 	s.c.f.mu.Lock()
 	defer s.c.f.mu.Unlock()
-	if s.maxHz == 0 || maxHz < s.maxHz {
-		if _, err := s.c.f.h.mpsseClock(int(s.maxHz)); err != nil {
+	if s.maxFreq == 0 || f < s.maxFreq {
+		if _, err := s.c.f.h.mpsseClock(int(s.maxFreq)); err != nil {
 			return nil, err
 		}
-		s.maxHz = maxHz
+		s.maxFreq = f
 	}
 	// Note: D4~D7 are unusable.
 	// TODO(maruel): Keep them as-is when transmitting.
@@ -93,20 +94,20 @@ func (s *spiMPSEEPort) Connect(maxHz int64, m spi.Mode, bits int) (spi.Conn, err
 }
 
 // LimitSpeed implements spi.Port.
-func (s *spiMPSEEPort) LimitSpeed(maxHz int64) error {
-	if maxHz > 30000000 {
+func (s *spiMPSEEPort) LimitSpeed(f physic.Frequency) error {
+	if f > 30*physic.MegaHertz {
 		return errors.New("d2xx: maximum supported clock is 30MHz")
 	}
-	if maxHz < 100 {
+	if f < 100*physic.Hertz {
 		return errors.New("d2xx: minimum supported clock is 100Hz")
 	}
 	s.c.f.mu.Lock()
 	defer s.c.f.mu.Unlock()
-	if s.maxHz != 0 && s.maxHz <= maxHz {
+	if s.maxFreq != 0 && s.maxFreq <= f {
 		return nil
 	}
-	s.maxHz = maxHz
-	_, err := s.c.f.h.mpsseClock(int(s.maxHz))
+	s.maxFreq = f
+	_, err := s.c.f.h.mpsseClock(int(s.maxFreq))
 	return err
 }
 
@@ -206,7 +207,7 @@ type spiSyncPort struct {
 	c spiSyncConn
 
 	// Mutable.
-	maxHz int64
+	maxFreq physic.Frequency
 }
 
 func (s *spiSyncPort) Close() error {
@@ -221,11 +222,11 @@ func (s *spiSyncPort) String() string {
 }
 
 // Connect implements spi.Port.
-func (s *spiSyncPort) Connect(maxHz int64, m spi.Mode, bits int) (spi.Conn, error) {
-	if maxHz > 48000000/12 {
-		return nil, errors.New("d2xx: maximum supported clock is 12MHz")
+func (s *spiSyncPort) Connect(f physic.Frequency, m spi.Mode, bits int) (spi.Conn, error) {
+	if f > 4*physic.MegaHertz {
+		return nil, errors.New("d2xx: maximum supported clock is 4MHz")
 	}
-	if maxHz < 100 {
+	if f < 100*physic.Hertz {
 		return nil, errors.New("d2xx: minimum supported clock is 100Hz")
 	}
 	if bits&7 != 0 {
@@ -251,11 +252,11 @@ func (s *spiSyncPort) Connect(maxHz int64, m spi.Mode, bits int) (spi.Conn, erro
 
 	s.c.f.mu.Lock()
 	defer s.c.f.mu.Unlock()
-	if s.maxHz == 0 || maxHz < s.maxHz {
-		if err := s.c.f.SetSpeed(s.maxHz); err != nil {
+	if s.maxFreq == 0 || f < s.maxFreq {
+		if err := s.c.f.SetSpeed(s.maxFreq); err != nil {
 			return nil, err
 		}
-		s.maxHz = maxHz
+		s.maxFreq = f
 	}
 	// D1 and D3 are output. D4~D7 are kept as-is.
 	mask := byte(1)<<1 | byte(1)<<3 | (s.c.f.dmask & 0xF0)
@@ -267,20 +268,20 @@ func (s *spiSyncPort) Connect(maxHz int64, m spi.Mode, bits int) (spi.Conn, erro
 }
 
 // LimitSpeed implements spi.Port.
-func (s *spiSyncPort) LimitSpeed(maxHz int64) error {
-	if maxHz > 48000000/12 {
-		return errors.New("d2xx: maximum supported clock is 12MHz")
+func (s *spiSyncPort) LimitSpeed(f physic.Frequency) error {
+	if f > 4*physic.MegaHertz {
+		return errors.New("d2xx: maximum supported clock is 4MHz")
 	}
-	if maxHz < 100 {
+	if f < 100*physic.Hertz {
 		return errors.New("d2xx: minimum supported clock is 100Hz")
 	}
 	s.c.f.mu.Lock()
 	defer s.c.f.mu.Unlock()
-	if s.maxHz != 0 && s.maxHz <= maxHz {
+	if s.maxFreq != 0 && s.maxFreq <= f {
 		return nil
 	}
-	if err := s.c.f.SetSpeed(s.maxHz); err == nil {
-		s.maxHz = maxHz
+	if err := s.c.f.SetSpeed(s.maxFreq); err == nil {
+		s.maxFreq = f
 	}
 	return nil
 }

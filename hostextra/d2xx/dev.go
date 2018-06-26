@@ -13,6 +13,7 @@ import (
 	"periph.io/x/periph/conn"
 	"periph.io/x/periph/conn/gpio"
 	"periph.io/x/periph/conn/i2c"
+	"periph.io/x/periph/conn/physic"
 	"periph.io/x/periph/conn/spi"
 )
 
@@ -55,7 +56,7 @@ type Dev interface {
 	Header() []gpio.PinIO
 
 	// SetSpeed sets the base clock for all I/O transactions.
-	SetSpeed(hz int64) error
+	SetSpeed(f physic.Frequency) error
 
 	// EEPROM returns the EEPROM content.
 	EEPROM(ee *ftdi.EEPROM) error
@@ -98,7 +99,7 @@ func (b *broken) Header() []gpio.PinIO {
 	return nil
 }
 
-func (b *broken) SetSpeed(hz int64) error {
+func (b *broken) SetSpeed(f physic.Frequency) error {
 	return b.err
 }
 
@@ -155,10 +156,10 @@ func (f *generic) Header() []gpio.PinIO {
 	return nil
 }
 
-func (f *generic) SetSpeed(hz int64) error {
+func (f *generic) SetSpeed(freq physic.Frequency) error {
 	// TODO(maruel): When using MPSEE, use the MPSEE command.
 	// TODO(maruel): Doc says the actual speed is 16x, confirm.
-	return f.h.setBaudRate(hz)
+	return f.h.setBaudRate(int64(freq / physic.Hertz))
 }
 
 func (f *generic) EEPROM(ee *ftdi.EEPROM) error {
@@ -323,12 +324,12 @@ func (f *FT232H) Header() []gpio.PinIO {
 	return out
 }
 
-func (f *FT232H) SetSpeed(hz int64) error {
+func (f *FT232H) SetSpeed(freq physic.Frequency) error {
 	// TODO(maruel): When using MPSEE, use the MPSEE command. If using sync
 	// bit-bang, use setBaudRate().
 
 	// TODO(maruel): Doc says the actual speed is 16x, confirm.
-	return f.h.setBaudRate(hz)
+	return f.h.setBaudRate(int64(freq / physic.Hertz))
 }
 
 // CBus sets the values of C0 to C7 in the specified direction and value.
