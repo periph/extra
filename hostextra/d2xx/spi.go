@@ -73,7 +73,7 @@ func (s *spiMPSEEPort) Connect(f physic.Frequency, m spi.Mode, bits int) (spi.Co
 	s.c.f.mu.Lock()
 	defer s.c.f.mu.Unlock()
 	if s.maxFreq == 0 || f < s.maxFreq {
-		if _, err := s.c.f.h.mpsseClock(int(s.maxFreq)); err != nil {
+		if _, err := s.c.f.h.mpsseClock(s.maxFreq); err != nil {
 			return nil, err
 		}
 		s.maxFreq = f
@@ -99,7 +99,7 @@ func (s *spiMPSEEPort) LimitSpeed(f physic.Frequency) error {
 		return errors.New("d2xx: maximum supported clock is 30MHz")
 	}
 	if f < 100*physic.Hertz {
-		return errors.New("d2xx: minimum supported clock is 100Hz")
+		return errors.New("d2xx: minimum supported clock is 100Hz; did you forget to multiply by physic.MegaHertz?")
 	}
 	s.c.f.mu.Lock()
 	defer s.c.f.mu.Unlock()
@@ -107,7 +107,7 @@ func (s *spiMPSEEPort) LimitSpeed(f physic.Frequency) error {
 		return nil
 	}
 	s.maxFreq = f
-	_, err := s.c.f.h.mpsseClock(int(s.maxFreq))
+	_, err := s.c.f.h.mpsseClock(s.maxFreq)
 	return err
 }
 
@@ -273,7 +273,7 @@ func (s *spiSyncPort) LimitSpeed(f physic.Frequency) error {
 		return errors.New("d2xx: maximum supported clock is 4MHz")
 	}
 	if f < 100*physic.Hertz {
-		return errors.New("d2xx: minimum supported clock is 100Hz")
+		return errors.New("d2xx: minimum supported clock is 100Hz; did you forget to multiply by physic.MegaHertz?")
 	}
 	s.c.f.mu.Lock()
 	defer s.c.f.mu.Unlock()

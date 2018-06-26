@@ -221,14 +221,14 @@ func (d *device) mpsseRegRead(addr uint16) (byte, error) {
 }
 
 // mpsseClock sets the clock at the closest value and returns it.
-func (d *device) mpsseClock(hz int) (int, error) {
+func (d *device) mpsseClock(f physic.Frequency) (physic.Frequency, error) {
 	clk := clock30MHz
-	base := 30000000
-	div := base / hz
+	base := 30 * physic.MegaHertz
+	div := base / f
 	if div >= 65536 {
 		clk = clock6MHz
 		base /= 5
-		div = base / hz
+		div = base / f
 		if div >= 65536 {
 			return 0, errors.New("d2xx: clock frequency is too low")
 		}
