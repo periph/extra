@@ -14,6 +14,7 @@ package d2xx
 
 import (
 	"errors"
+	"fmt"
 
 	"periph.io/x/periph/conn"
 	"periph.io/x/periph/conn/gpio"
@@ -44,10 +45,10 @@ func (s *spiMPSEEPort) String() string {
 // Connect implements spi.Port.
 func (s *spiMPSEEPort) Connect(f physic.Frequency, m spi.Mode, bits int) (spi.Conn, error) {
 	if f > 30*physic.MegaHertz {
-		return nil, errors.New("d2xx: maximum supported clock is 30MHz")
+		return nil, fmt.Errorf("d2xx: invalid speed %s; maximum supported clock is 30MHz", f)
 	}
 	if f < 100*physic.Hertz {
-		return nil, errors.New("d2xx: minimum supported clock is 100Hz")
+		return nil, fmt.Errorf("d2xx: invalid speed %s; minimum supported clock is 100Hz; did you forget to multiply by physic.MegaHertz?", f)
 	}
 	if bits&7 != 0 {
 		return nil, errors.New("d2xx: bits must be multiple of 8")
@@ -224,10 +225,10 @@ func (s *spiSyncPort) String() string {
 // Connect implements spi.Port.
 func (s *spiSyncPort) Connect(f physic.Frequency, m spi.Mode, bits int) (spi.Conn, error) {
 	if f > 4*physic.MegaHertz {
-		return nil, errors.New("d2xx: maximum supported clock is 4MHz")
+		return nil, fmt.Errorf("d2xx: invalid speed %s; maximum supported clock is 4MHz", f)
 	}
 	if f < 100*physic.Hertz {
-		return nil, errors.New("d2xx: minimum supported clock is 100Hz")
+		return nil, fmt.Errorf("d2xx: invalid speed %s; minimum supported clock is 100Hz; did you forget to multiply by physic.MegaHertz?", f)
 	}
 	if bits&7 != 0 {
 		return nil, errors.New("d2xx: bits must be multiple of 8")
@@ -270,10 +271,10 @@ func (s *spiSyncPort) Connect(f physic.Frequency, m spi.Mode, bits int) (spi.Con
 // LimitSpeed implements spi.Port.
 func (s *spiSyncPort) LimitSpeed(f physic.Frequency) error {
 	if f > 4*physic.MegaHertz {
-		return errors.New("d2xx: maximum supported clock is 4MHz")
+		return fmt.Errorf("d2xx: invalid speed %s; maximum supported clock is 4MHz", f)
 	}
 	if f < 100*physic.Hertz {
-		return errors.New("d2xx: minimum supported clock is 100Hz; did you forget to multiply by physic.MegaHertz?")
+		return fmt.Errorf("d2xx: invalid speed %s; minimum supported clock is 100Hz; did you forget to multiply by physic.MegaHertz?", f)
 	}
 	s.c.f.mu.Lock()
 	defer s.c.f.mu.Unlock()
