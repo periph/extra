@@ -3,7 +3,7 @@
 [![mascot](https://raw.githubusercontent.com/periph/website/master/site/static/img/periph-mascot-280.png)](https://periph.io/)
 
 Supplemental tools for [periph.io/x/periph](https://periph.io/x/periph) that
-cannot live in this repository. It may be because the tool/library:
+cannot live there. It may be because the tool/library:
 
 - depends on external packages
 - uses cgo
@@ -16,7 +16,8 @@ cannot live in this repository. It may be because the tool/library:
 
 ## Install
 
-Install the whole suite with periphextra enabled:
+Install the whole suite with `periphextra` enabled to have access to the full
+functionality:
 
 ```
 go get -u periph.io/x/extra/cmd/...
