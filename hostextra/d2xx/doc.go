@@ -2,19 +2,15 @@
 // Use of this source code is governed under the Apache License, Version 2.0
 // that can be found in the LICENSE file.
 
-// Package d2xx implements support for various Future Technology devices like
-// the FT232H USB GPIO, I²C, SPI, CAN, UART, JTAG bus via its D2XX driver.
+// Package d2xx is a cgo wrapper for the FTDI d2xx drive.
 //
-// Setup
+// The supported devices (ft232h/ft232r) implement support for various
+// protocols like the GPIO, I²C, SPI, UART, JTAG.
 //
-// See https://github.com/periph/extra/tree/master/hostextra/d2xx/README.md to
-// install the driver correctly.
+// More details
 //
-// Supported products
-//
-// http://www.ftdichip.com/Products/ICs/FT232R.htm
-//
-// http://www.ftdichip.com/Products/ICs/FT232H.htm
+// See https://periph.io/device/ftdi/ for more details, and how to configure
+// the host to be able to use this driver.
 //
 // Datasheets
 //
