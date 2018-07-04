@@ -173,7 +173,14 @@ func (d *device) read(b []byte) (int, error) {
 	// TODO(maruel): Investigate FT_GetStatus().
 	// TODO(maruel): Use FT_SetEventNotification() instead of looping when
 	// waiting for bytes.
-	p, e := d.h.d2xxGetQueueStatus()
+	p := uint32(0)
+	e := 0
+	for i := 0; i < 3; i++ {
+		// The FT232R is quite finicky.
+		if p, e = d.h.d2xxGetQueueStatus(); p != 0 && e == 0 {
+			break
+		}
+	}
 	if p == 0 || e != 0 {
 		return int(p), toErr("Read/GetQueueStatus", e)
 	}
