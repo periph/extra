@@ -525,14 +525,14 @@ type FT232R struct {
 	D7 gpio.PinIO
 	// Aliases to the Dn pins for user convenience. They point to the exact same
 	// pin.
-	TX  gpio.PinIO
-	RX  gpio.PinIO
-	RTS gpio.PinIO
-	CTS gpio.PinIO
-	DTR gpio.PinIO
-	DSR gpio.PinIO
-	DCD gpio.PinIO
-	RI  gpio.PinIO
+	TX  gpio.PinIO // D0 Transmit
+	RX  gpio.PinIO // D1 Receive
+	RTS gpio.PinIO // D2 Request To Send Control Output / Handshake signal
+	CTS gpio.PinIO // D3 Clear to Send Control input / Handshake signal
+	DTR gpio.PinIO // D4 Data Terminal Ready Control Output / Handshake signal
+	DSR gpio.PinIO // D5 Data Set Ready Control Input / Handshake signal
+	DCD gpio.PinIO // D6 Data Carrier Detect Control input
+	RI  gpio.PinIO // D7 Ring Indicator Control Input. When remote wake up is enabled in the internal EEPROM taking RI# low can be used to resume the PC USB host controller from suspend.
 
 	// The CBus pins are slower to use, but can drive an high load, like a LED.
 	C0 gpio.PinIO
@@ -641,14 +641,25 @@ func (f *FT232R) SPI() (spi.PortCloser, error) {
 	return &f.s, nil
 }
 
-func (f *FT232R) syncBusFunc(n int) string {
+// syncBusGPIOFunc implements syncBusGPIO. It returns the function of a GPIO
+// pin.
+func (f *FT232R) syncBusGPIOFunc(n int) string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	// TODO(maruel): Once UART is supported:
 	// func := []string{"TX", "RX", "RTS", "CTS", "DTR", "DSR", "DCD", "RI"}
-	// if f.usingSPI {
-	//   func := []string{"SPI_MOSI", "SPI_MISO", "SPI_CLK", "SPI_CS", ...}
-	// }
+	if f.usingSPI {
+		switch n {
+		case 0:
+			return "SPI_MOSI"
+		case 1:
+			return "SPI_MISO"
+		case 2:
+			return "SPI_CLK"
+		case 3:
+			return "SPI_CS"
+		}
+	}
 	mask := uint8(1 << uint(n))
 	if f.dmask&mask != 0 {
 		return "Out/" + gpio.Level(f.dvalue&mask != 0).String()
@@ -656,10 +667,11 @@ func (f *FT232R) syncBusFunc(n int) string {
 	return "In/" + f.syncBusReadLocked(n).String()
 }
 
-func (f *FT232R) syncBusIn(n int) error {
+// syncBusGPIOIn implements syncBusGPIO.
+func (f *FT232R) syncBusGPIOIn(n int) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	// TODO(maruel): if usingSPI && n < 4.
+	// TODO(maruel): if f.usingSPI && n < 4.
 	mask := uint8(1 << uint(n))
 	if f.dmask&mask == 0 {
 		// Already input.
@@ -673,7 +685,8 @@ func (f *FT232R) syncBusIn(n int) error {
 	return nil
 }
 
-func (f *FT232R) syncBusRead(n int) gpio.Level {
+// syncBusGPIORead implements syncBusGPIO.
+func (f *FT232R) syncBusGPIORead(n int) gpio.Level {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.syncBusReadLocked(n)
@@ -693,7 +706,8 @@ func (f *FT232R) syncBusReadLocked(n int) gpio.Level {
 	return f.dvalue&mask != 0
 }
 
-func (f *FT232R) syncBusOut(n int, l gpio.Level) error {
+// syncBusGPIOOut implements syncBusGPIO.
+func (f *FT232R) syncBusGPIOOut(n int, l gpio.Level) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	mask := uint8(1 << uint(n))
@@ -717,7 +731,8 @@ func (f *FT232R) syncBusOut(n int, l gpio.Level) error {
 	return nil
 }
 
-func (f *FT232R) cBusFunc(n int) string {
+// cBusGPIOFunc implements cBusGPIO.
+func (f *FT232R) cBusGPIOFunc(n int) string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	fmask := uint8(0x10 << uint(n))
@@ -728,7 +743,8 @@ func (f *FT232R) cBusFunc(n int) string {
 	return "In/" + f.cBusReadLocked(n).String()
 }
 
-func (f *FT232R) cBusIn(n int) error {
+// cBusGPIOIn implements cBusGPIO.
+func (f *FT232R) cBusGPIOIn(n int) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	fmask := uint8(0x10 << uint(n))
@@ -744,7 +760,8 @@ func (f *FT232R) cBusIn(n int) error {
 	return nil
 }
 
-func (f *FT232R) cBusRead(n int) gpio.Level {
+// cBusGPIORead implements cBusGPIO.
+func (f *FT232R) cBusGPIORead(n int) gpio.Level {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.cBusReadLocked(n)
@@ -760,7 +777,8 @@ func (f *FT232R) cBusReadLocked(n int) gpio.Level {
 	return f.cbusnibble&vmask != 0
 }
 
-func (f *FT232R) cBusOut(n int, l gpio.Level) error {
+// cBusGPIOOut implements cBusGPIO.
+func (f *FT232R) cBusGPIOOut(n int, l gpio.Level) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	fmask := uint8(0x10 << uint(n))

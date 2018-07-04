@@ -14,21 +14,24 @@ import (
 	"periph.io/x/periph/conn/physic"
 )
 
+// syncBusGPIO is the handler of a synchronous bitbang bus.
+//
+// More details at:
 // http://www.ftdichip.com/Support/Documents/AppNotes/AN_232R-01_Bit_Bang_Mode_Available_For_FT232R_and_Ft245R.pdf
-
-// syncBus is the handler of a synchronous bitbang bus.
-type syncBus interface {
-	syncBusFunc(n int) string
-	syncBusIn(n int) error
-	syncBusRead(n int) gpio.Level
-	syncBusOut(n int, l gpio.Level) error
+type syncBusGPIO interface {
+	syncBusGPIOFunc(n int) string
+	syncBusGPIOIn(n int) error
+	syncBusGPIORead(n int) gpio.Level
+	syncBusGPIOOut(n int, l gpio.Level) error
 }
 
-// syncPin represents a GPIO on a synchronous bitbang bus. It is stateless.
+// syncPin represents a GPIO on a synchronous bitbang bus.
+//
+// It is immutable and stateless.
 type syncPin struct {
 	n   string
 	num int
-	bus syncBus
+	bus syncBusGPIO
 }
 
 // String implements conn.Resource.
@@ -53,7 +56,7 @@ func (s *syncPin) Number() int {
 
 // Function implements pin.Pin.
 func (s *syncPin) Function() string {
-	return s.bus.syncBusFunc(s.num)
+	return s.bus.syncBusGPIOFunc(s.num)
 }
 
 // In implements gpio.PinIn.
@@ -66,12 +69,12 @@ func (s *syncPin) In(pull gpio.Pull, e gpio.Edge) error {
 		// EEPROM has a PullDownEnable flag.
 		return errors.New("d2xx: pull is not supported")
 	}
-	return s.bus.syncBusIn(s.num)
+	return s.bus.syncBusGPIOIn(s.num)
 }
 
 // Read implements gpio.PinIn.
 func (s *syncPin) Read() gpio.Level {
-	return s.bus.syncBusRead(s.num)
+	return s.bus.syncBusGPIORead(s.num)
 }
 
 // WaitForEdge implements gpio.PinIn.
@@ -94,7 +97,7 @@ func (s *syncPin) Pull() gpio.Pull {
 
 // Out implements gpio.PinOut.
 func (s *syncPin) Out(l gpio.Level) error {
-	return s.bus.syncBusOut(s.num, l)
+	return s.bus.syncBusGPIOOut(s.num, l)
 }
 
 // PWM implements gpio.PinOut.
@@ -122,20 +125,27 @@ func (s *syncPin) Hysteresis() bool {
 
 //
 
-// cBus is the handler of a CBus bitbang bus.
-type cBus interface {
-	cBusFunc(n int) string
-	cBusIn(n int) error
-	cBusRead(n int) gpio.Level
-	cBusOut(n int, l gpio.Level) error
+// cBusGPIO is the handler of a CBus bitbang bus.
+//
+// This is an asynchronous mode.
+//
+// More details at:
+// http://www.ftdichip.com/Support/Knowledgebase/index.html?cbusbitbangmode.htm
+type cBusGPIO interface {
+	cBusGPIOFunc(n int) string
+	cBusGPIOIn(n int) error
+	cBusGPIORead(n int) gpio.Level
+	cBusGPIOOut(n int, l gpio.Level) error
 }
 
-// cbusPin represents a GPIO on a CBus bitbang bus. It is stateless.
+// cbusPin represents a GPIO on a CBus bitbang bus.
+//
+// It is immutable and stateless.
 type cbusPin struct {
 	n   string
 	num int
 	p   gpio.Pull
-	bus cBus
+	bus cBusGPIO
 }
 
 // String implements conn.Resource.
@@ -160,7 +170,7 @@ func (c *cbusPin) Number() int {
 
 // Function implements pin.Pin.
 func (c *cbusPin) Function() string {
-	return c.bus.cBusFunc(c.num)
+	return c.bus.cBusGPIOFunc(c.num)
 }
 
 // In implements gpio.PinIn.
@@ -173,12 +183,12 @@ func (c *cbusPin) In(pull gpio.Pull, e gpio.Edge) error {
 		// EEPROM has a PullDownEnable flag.
 		return errors.New("d2xx: pull is not supported")
 	}
-	return c.bus.cBusIn(c.num)
+	return c.bus.cBusGPIOIn(c.num)
 }
 
 // Read implements gpio.PinIn.
 func (c *cbusPin) Read() gpio.Level {
-	return c.bus.cBusRead(c.num)
+	return c.bus.cBusGPIORead(c.num)
 }
 
 // WaitForEdge implements gpio.PinIn.
@@ -201,7 +211,7 @@ func (c *cbusPin) Pull() gpio.Pull {
 
 // Out implements gpio.PinOut.
 func (c *cbusPin) Out(l gpio.Level) error {
-	return c.bus.cBusOut(c.num, l)
+	return c.bus.cBusGPIOOut(c.num, l)
 }
 
 // PWM implements gpio.PinOut.
