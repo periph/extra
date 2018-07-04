@@ -5,9 +5,7 @@
 # udev rule file to make FTDI devices accessible usable as non-root and disable
 # the ftdi_sio driver.
 #
-# See
-# https://github.com/periph/extra/tree/master/hostextra/d2xx
-# for more information.
+# See https://periph.io/device/ftdi/ for more information.
 
 # Make FTDI device usable from users in group plugdev.
 SUBSYSTEM=="usb", ATTRS{idVendor}=="0403", MODE="0664", GROUP="plugdev"
