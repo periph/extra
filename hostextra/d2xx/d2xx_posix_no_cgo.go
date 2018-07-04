@@ -23,8 +23,8 @@ func d2xxCreateDeviceInfoList() (int, int) {
 
 // Device functions.
 
-func d2xxOpen(i int) (handle, int) {
-	return 0, noCGO
+func d2xxOpen(i int) (d2xxHandle, int) {
+	return handle(0), noCGO
 }
 
 func (h handle) d2xxClose() int {

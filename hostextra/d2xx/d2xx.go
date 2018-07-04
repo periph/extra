@@ -50,12 +50,8 @@ func numDevices() (int, error) {
 
 //
 
-func openDev(i int) (*device, error) {
-	h, e := d2xxOpen(i)
-	// The d2xx can hang for a long time (5s) under certain circumstances and the
-	// Go profiler is not very useful to find the source, so use manual logging
-	// to see where time it spent.
-	//d := &device{h: d2xxLoggingHandle(h)}
+func openDev(opener func(i int) (d2xxHandle, int), i int) (*device, error) {
+	h, e := opener(i)
 	d := &device{h: h}
 	if e != 0 {
 		return d, toErr("Open", e)
@@ -424,7 +420,9 @@ type d2xxHandle interface {
 type handle uintptr
 
 // d2xxLoggingHandle adds logging to help diagnose issues with the d2xx driver.
-type d2xxLoggingHandle handle
+type d2xxLoggingHandle struct {
+	d d2xxHandle
+}
 
 // log10 is a cheap way to find the most significant digit
 func log10(i int64) uint {
@@ -487,89 +485,87 @@ func logDefer(fmt string, args ...interface{}) func() {
 	}
 }
 
-func (d d2xxLoggingHandle) d2xxClose() int {
+func (d *d2xxLoggingHandle) d2xxClose() int {
 	defer logDefer("d2xxClose()")()
-	return handle(d).d2xxClose()
+	return d.d.d2xxClose()
 }
 func (d d2xxLoggingHandle) d2xxResetDevice() int {
 	defer logDefer("d2xxResetDevice()")()
-	return handle(d).d2xxResetDevice()
+	return d.d.d2xxResetDevice()
 }
 func (d d2xxLoggingHandle) d2xxGetDeviceInfo() (ftdi.DevType, uint16, uint16, int) {
 	defer logDefer("d2xxGetDeviceInfo()")()
-	return handle(d).d2xxGetDeviceInfo()
+	return d.d.d2xxGetDeviceInfo()
 }
 func (d d2xxLoggingHandle) d2xxEEPROMRead(dev ftdi.DevType, e *ftdi.EEPROM) int {
 	defer logDefer("d2xxEEPROMRead(%v, %d bytes)", dev, e)()
-	return handle(d).d2xxEEPROMRead(dev, e)
+	return d.d.d2xxEEPROMRead(dev, e)
 }
 func (d d2xxLoggingHandle) d2xxEEPROMProgram(e *ftdi.EEPROM) int {
 	defer logDefer("d2xxEEPROMProgram(%#x)", e)()
-	return handle(d).d2xxEEPROMProgram(e)
+	return d.d.d2xxEEPROMProgram(e)
 }
 func (d d2xxLoggingHandle) d2xxEraseEE() int {
 	defer logDefer("d2xxEraseEE()")()
-	return handle(d).d2xxEraseEE()
+	return d.d.d2xxEraseEE()
 }
 func (d d2xxLoggingHandle) d2xxWriteEE(offset uint8, value uint16) int {
 	defer logDefer("d2xxWriteEE()", offset, value)()
-	return handle(d).d2xxWriteEE(offset, value)
+	return d.d.d2xxWriteEE(offset, value)
 }
 func (d d2xxLoggingHandle) d2xxEEUASize() (int, int) {
 	defer logDefer("d2xxEEUASize()")()
-	return handle(d).d2xxEEUASize()
+	return d.d.d2xxEEUASize()
 }
 func (d d2xxLoggingHandle) d2xxEEUARead(ua []byte) int {
 	defer logDefer("d2xxEEUARead(%d bytes)", len(ua))()
-	return handle(d).d2xxEEUARead(ua)
+	return d.d.d2xxEEUARead(ua)
 }
 func (d d2xxLoggingHandle) d2xxEEUAWrite(ua []byte) int {
 	defer logDefer("d2xxEEUAWrite(%#x)", ua)()
-	return handle(d).d2xxEEUAWrite(ua)
+	return d.d.d2xxEEUAWrite(ua)
 }
 func (d d2xxLoggingHandle) d2xxSetChars(eventChar byte, eventEn bool, errorChar byte, errorEn bool) int {
 	defer logDefer("d2xxSetChars(%d, %t, %d, %t)", eventChar, eventEn, errorChar, errorEn)()
-	return handle(d).d2xxSetChars(eventChar, eventEn, errorChar, errorEn)
+	return d.d.d2xxSetChars(eventChar, eventEn, errorChar, errorEn)
 }
 func (d d2xxLoggingHandle) d2xxSetUSBParameters(in, out int) int {
 	defer logDefer("d2xxSetUSBParameters(%d, %d)", in, out)()
-	return handle(d).d2xxSetUSBParameters(in, out)
+	return d.d.d2xxSetUSBParameters(in, out)
 }
 func (d d2xxLoggingHandle) d2xxSetFlowControl() int {
 	defer logDefer("d2xxSetFlowControl()")()
-	return handle(d).d2xxSetFlowControl()
+	return d.d.d2xxSetFlowControl()
 }
 func (d d2xxLoggingHandle) d2xxSetTimeouts(readMS, writeMS int) int {
 	defer logDefer("d2xxSetTimeouts(%d, %d)", readMS, writeMS)()
-	return handle(d).d2xxSetTimeouts(readMS, writeMS)
+	return d.d.d2xxSetTimeouts(readMS, writeMS)
 }
 func (d d2xxLoggingHandle) d2xxSetLatencyTimer(delayMS uint8) int {
 	defer logDefer("d2xxSetLatencyTimer(%d)", delayMS)()
-	return handle(d).d2xxSetLatencyTimer(delayMS)
+	return d.d.d2xxSetLatencyTimer(delayMS)
 }
 func (d d2xxLoggingHandle) d2xxSetBaudRate(hz uint32) int {
 	defer logDefer("d2xxSetBaudRate(%d)", hz)()
-	return handle(d).d2xxSetBaudRate(hz)
+	return d.d.d2xxSetBaudRate(hz)
 }
 func (d d2xxLoggingHandle) d2xxGetQueueStatus() (uint32, int) {
 	defer logDefer("d2xxGetQueueStatus()")()
-	return handle(d).d2xxGetQueueStatus()
+	return d.d.d2xxGetQueueStatus()
 }
 func (d d2xxLoggingHandle) d2xxRead(b []byte) (int, int) {
 	defer logDefer("d2xxRead(%d bytes)", len(b))()
-	return handle(d).d2xxRead(b)
+	return d.d.d2xxRead(b)
 }
 func (d d2xxLoggingHandle) d2xxWrite(b []byte) (int, int) {
 	defer logDefer("d2xxWrite(%#x)", b)()
-	return handle(d).d2xxWrite(b)
+	return d.d.d2xxWrite(b)
 }
 func (d d2xxLoggingHandle) d2xxGetBitMode() (byte, int) {
 	defer logDefer("d2xxGetBitMode()")()
-	return handle(d).d2xxGetBitMode()
+	return d.d.d2xxGetBitMode()
 }
 func (d d2xxLoggingHandle) d2xxSetBitMode(mask, mode byte) int {
 	defer logDefer("d2xxSetBitMode(0x%02X, 0x%02X)", mask, mode)()
-	return handle(d).d2xxSetBitMode(mask, mode)
+	return d.d.d2xxSetBitMode(mask, mode)
 }
-
-var _ d2xxHandle = handle(0)

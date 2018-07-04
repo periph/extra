@@ -6,7 +6,6 @@ package d2xx
 
 import (
 	"errors"
-	"strconv"
 	"sync"
 
 	"periph.io/x/extra/hostextra/d2xx/ftdi"
@@ -56,6 +55,8 @@ type Dev interface {
 	Header() []gpio.PinIO
 
 	// SetSpeed sets the base clock for all I/O transactions.
+	//
+	// The device defaults to its fastest speed.
 	SetSpeed(f physic.Frequency) error
 
 	// EEPROM returns the EEPROM content.
@@ -73,18 +74,17 @@ type Dev interface {
 	WriteUserArea(ua []byte) error
 }
 
-// TODO(maruel): JTAG, Parallel, UART.
-
 // broken represents a device that couldn't be opened correctly.
 //
 // It returns an error message to help the user diagnose issues.
 type broken struct {
 	index int
 	err   error
+	name  string
 }
 
 func (b *broken) String() string {
-	return "broken#" + strconv.Itoa(b.index) + ": " + b.err.Error()
+	return b.name
 }
 
 func (b *broken) Halt() error {
@@ -130,10 +130,11 @@ type generic struct {
 	// Immutable after initialization.
 	index int
 	h     device
+	name  string
 }
 
 func (f *generic) String() string {
-	return f.h.t.String() + "(" + strconv.Itoa(f.index) + ")"
+	return f.name
 }
 
 // Halt implements conn.Resource.
@@ -209,6 +210,8 @@ func newFT232H(g generic) (*FT232H, error) {
 		generic: g,
 		cbus:    gpiosMPSSE{h: &g.h, cbus: true},
 		dbus:    gpiosMPSSE{h: &g.h},
+		c8:      invalidPin{num: 16, n: "C8"}, // , dp: gpio.PullUp
+		c9:      invalidPin{num: 17, n: "C9"}, // , dp: gpio.PullUp
 	}
 	f.cbus.init()
 	f.dbus.init()
@@ -225,8 +228,8 @@ func newFT232H(g generic) (*FT232H, error) {
 	}
 	// TODO(maruel): C8 and C9 can be used when their mux in the EEPROM is set to
 	// ft232hCBusIOMode.
-	f.hdr[16] = &invalidPin{num: 16, n: "C8"} // , dp: gpio.PullUp
-	f.hdr[17] = &invalidPin{num: 17, n: "C9"} // , dp: gpio.PullUp
+	f.hdr[16] = &f.c8
+	f.hdr[17] = &f.c9
 	f.D0 = f.hdr[0]
 	f.D1 = f.hdr[1]
 	f.D2 = f.hdr[2]
@@ -303,6 +306,8 @@ type FT232H struct {
 	hdr  [18]gpio.PinIO
 	cbus gpiosMPSSE
 	dbus gpiosMPSSE
+	c8   invalidPin // gpio.PullUp
+	c9   invalidPin // gpio.PullUp
 
 	mu       sync.Mutex
 	usingI2C bool
@@ -511,24 +516,16 @@ func newFT232R(g generic) (*FT232R, error) {
 type FT232R struct {
 	generic
 
-	D0 gpio.PinIO
-	D1 gpio.PinIO
-	D2 gpio.PinIO
-	D3 gpio.PinIO
-	D4 gpio.PinIO
-	D5 gpio.PinIO
-	D6 gpio.PinIO
-	D7 gpio.PinIO
-	// Aliases to the Dn pins for user convenience. They point to the exact same
-	// pin.
-	TX  gpio.PinIO // D0 Transmit
-	RX  gpio.PinIO // D1 Receive
-	RTS gpio.PinIO // D2 Request To Send Control Output / Handshake signal
-	CTS gpio.PinIO // D3 Clear to Send Control input / Handshake signal
-	DTR gpio.PinIO // D4 Data Terminal Ready Control Output / Handshake signal
-	DSR gpio.PinIO // D5 Data Set Ready Control Input / Handshake signal
-	DCD gpio.PinIO // D6 Data Carrier Detect Control input
-	RI  gpio.PinIO // D7 Ring Indicator Control Input. When remote wake up is enabled in the internal EEPROM taking RI# low can be used to resume the PC USB host controller from suspend.
+	// Pin and their alias to the Dn pins for user convenience. Each pair points
+	// to the exact same pin.
+	D0, TX  gpio.PinIO // Transmit
+	D1, RX  gpio.PinIO // Receive
+	D2, RTS gpio.PinIO // Request To Send Control Output / Handshake signal
+	D3, CTS gpio.PinIO // Clear to Send Control input / Handshake signal
+	D4, DTR gpio.PinIO // Data Terminal Ready Control Output / Handshake signal
+	D5, DSR gpio.PinIO // Data Set Ready Control Input / Handshake signal
+	D6, DCD gpio.PinIO // Data Carrier Detect Control input
+	D7, RI  gpio.PinIO // Ring Indicator Control Input. When remote wake up is enabled in the internal EEPROM taking RI# low can be used to resume the PC USB host controller from suspend.
 
 	// The CBus pins are slower to use, but can drive an high load, like a LED.
 	C0 gpio.PinIO

@@ -32,7 +32,7 @@ func d2xxCreateDeviceInfoList() (int, int) {
 
 // Device functions.
 
-func d2xxOpen(i int) (handle, int) {
+func d2xxOpen(i int) (d2xxHandle, int) {
 	var h handle
 	r1, _, _ := pOpen.Call(uintptr(i), uintptr(unsafe.Pointer(&h)))
 	return h, int(r1)

@@ -5,6 +5,7 @@
 package d2xx
 
 import (
+	"strconv"
 	"sync"
 
 	"periph.io/x/extra/hostextra/d2xx/ftdi"
@@ -18,25 +19,20 @@ import (
 
 // All enumerates all the connected FTDI devices.
 func All() []Dev {
-	mu.Lock()
-	defer mu.Unlock()
-	out := make([]Dev, len(all))
-	copy(out, all)
+	drv.mu.Lock()
+	defer drv.mu.Unlock()
+	out := make([]Dev, len(drv.all))
+	copy(out, drv.all)
 	return out
 }
 
 //
 
-var (
-	mu  sync.Mutex
-	all []Dev
-)
-
 // open opens a FTDI device.
 //
 // Must be called with mu held.
-func open(i int) (Dev, error) {
-	h, err := openDev(i)
+func open(opener func(i int) (d2xxHandle, int), i int) (Dev, error) {
+	h, err := openDev(opener, i)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +50,7 @@ func open(i int) (Dev, error) {
 		// The second attempt worked.
 	}
 	// Makes a copy of the handle.
-	g := generic{index: i, h: *h}
+	g := generic{index: i, h: *h, name: h.t.String() + "(" + strconv.Itoa(i) + ")"}
 	// Makes a copy of the generic instance.
 	switch g.h.t {
 	case ftdi.FT232H:
@@ -110,6 +106,10 @@ func registerDev(d Dev) error {
 
 // driver implements periph.Driver.
 type driver struct {
+	mu         sync.Mutex
+	all        []Dev
+	d2xxOpen   func(i int) (d2xxHandle, int)
+	numDevices func() (int, error)
 }
 
 func (d *driver) String() string {
@@ -125,15 +125,15 @@ func (d *driver) After() []string {
 }
 
 func (d *driver) Init() (bool, error) {
-	num, err := numDevices()
+	num, err := d.numDevices()
 	if err != nil {
 		return true, err
 	}
 	for i := 0; i < num; i++ {
 		// TODO(maruel): Close the device one day. :)
-		if d, err1 := open(i); err1 == nil {
-			all = append(all, d)
-			if err := registerDev(d); err != nil {
+		if dev, err1 := open(d.d2xxOpen, i); err1 == nil {
+			d.all = append(d.all, dev)
+			if err := registerDev(dev); err != nil {
 				return true, err
 			}
 		} else {
@@ -144,16 +144,38 @@ func (d *driver) Init() (bool, error) {
 			// often results in a broken device on the second process. Figure out why
 			// and make it more resilient.
 			err = err1
-			all = append(all, &broken{index: i, err: err})
+			// The serial number is not available so what can be listed is limited.
+			// TODO(maruel): Add VID/PID?
+			name := "broken#" + strconv.Itoa(i) + ": " + err.Error()
+			d.all = append(d.all, &broken{index: i, err: err, name: name})
 		}
 	}
 	return true, err
 }
 
+func (d *driver) reset() {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.all = nil
+	// numDevices is mocked in tests.
+	d.numDevices = numDevices
+	// d2xxOpen is mocked in tests.
+	d.d2xxOpen = d2xxOpen
+
+	// The d2xx can hang for up to the timeout under certain circumstances and the
+	// Go profiler is not very useful to find the source, so use manual logging
+	// to see where time it spent.
+	//d.d2xxOpen = func(i int) (d2xxHandle, int) {
+	//	h, e := d2xxOpen(i)
+	//	return &d2xxLoggingHandle{h}, e
+	//}
+}
+
 func init() {
 	if !disabled {
-		periph.MustRegister(&driver{})
+		drv.reset()
+		periph.MustRegister(&drv)
 	}
 }
 
-var _ periph.Driver = &driver{}
+var drv driver

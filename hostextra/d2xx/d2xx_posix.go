@@ -35,7 +35,7 @@ func d2xxCreateDeviceInfoList() (int, int) {
 
 // Device functions.
 
-func d2xxOpen(i int) (handle, int) {
+func d2xxOpen(i int) (d2xxHandle, int) {
 	var h C.FT_HANDLE
 	e := C.FT_Open(C.int(i), &h)
 	if uintptr(h) == 0 && e == 0 {
