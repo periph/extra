@@ -165,7 +165,29 @@ func (d *device) setupMPSSE() error {
 	if err := d.setBitMode(0, 2); err != nil {
 		return err
 	}
+	if err := d.mpsseVerify(); err != nil {
+		return err
+	}
 
+	// Initialize MPSSE to a known state.
+	cmd := []byte{
+		clock30MHz, clockNormal, clock2Phase, internalLoopbackDisable,
+		gpioSetC, 0xFF, 0x00,
+		gpioSetD, 0xFF, 0x00,
+	}
+	if _, err := d.write(cmd); err != nil {
+		return err
+	}
+	// Success!!
+	return nil
+}
+
+// mpsseVerify sends an invalid MPSSE command and verifies the returned value
+// is incorrect.
+//
+// In practice this takes around 2ms.
+func (d *device) mpsseVerify() error {
+	defer logDefer("mpsseVerify()")()
 	for _, v := range []byte{0xAA, 0xAB} {
 		// Write a bad command and ensure it returned correctly.
 		if _, err := d.write([]byte{v}); err != nil {
@@ -193,17 +215,6 @@ func (d *device) setupMPSSE() error {
 			return fmt.Errorf("d2xx: I/O failure while trying to setup MPSSE: %v", b[:])
 		}
 	}
-
-	// Initialize MPSSE to a known state.
-	cmd := []byte{
-		clock30MHz, clockNormal, clock2Phase, internalLoopbackDisable,
-		gpioSetC, 0xFF, 0x00,
-		gpioSetD, 0xFF, 0x00,
-	}
-	if _, err := d.write(cmd); err != nil {
-		return err
-	}
-	// Success!!
 	return nil
 }
 

@@ -246,11 +246,7 @@ func newFT232H(g generic) (*FT232H, error) {
 	f.C8 = f.hdr[16]
 	f.C9 = f.hdr[17]
 
-	// Update state by forcing all pins as inputs.
-	f.h.mpsseCBus(0, 0)
-	f.h.mpsseDBus(0, 0)
-	f.cbus.read()
-	f.dbus.read()
+	// This function forces all pins as inputs.
 	if err := f.h.setupMPSSE(); err != nil {
 		return nil, err
 	}
