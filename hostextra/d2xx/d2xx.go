@@ -87,42 +87,33 @@ func (d *device) closeDev() error {
 
 // setupCommon is the general setup for common devices.
 //
-// It configures the device itself, the D2XX communication
-// parameters and the USB parameters. The API doesn't make a clear distinction
-// between all 3.
+// It tries first the 'happy path' which doesn't reset the device. By doing so,
+// the goal is to reduce the amount of glitches on the GPIO pins, on a best
+// effort basis. On all devices, the GPIOs are still reset as inputs, since
+// there is no way to determine if each GPIO is an input or output.
 func (d *device) setupCommon() error {
-	// Device: reset the device completely so it becomes in a known state.
-	// TODO(maruel): It may not be really required, especially that this likely
-	// trigger spurious I/O.
-	if err := d.reset(); err != nil {
-		return err
-	}
 	// Driver: maximum packet size. Note that this clears any data in the buffer,
 	// so it is good to do it immediately after a reset. The 'out' parameter is
 	// ignored.
 	if e := d.h.d2xxSetUSBParameters(65536, 0); e != 0 {
 		return toErr("SetUSBParameters", e)
 	}
-	// Not sure: Disable event/error characters.
-	if e := d.h.d2xxSetChars(0, false, 0, false); e != 0 {
-		return toErr("SetChars", e)
-	}
 	// Driver: Set I/O timeouts to 15 sec. The reason is that we want the
 	// timeouts to be very visible, at least as the driver is being developped.
 	if e := d.h.d2xxSetTimeouts(15000, 15000); e != 0 {
 		return toErr("SetTimeouts", e)
 	}
-	// Device: Latency timer at 1ms.
+	// Not sure: Disable event/error characters.
+	if e := d.h.d2xxSetChars(0, false, 0, false); e != 0 {
+		return toErr("SetChars", e)
+	}
+	// Not sure: Latency timer at 1ms.
 	if e := d.h.d2xxSetLatencyTimer(1); e != 0 {
 		return toErr("SetLatencyTimer", e)
 	}
 	// Not sure: Turn on flow control to synchronize IN requests.
 	if e := d.h.d2xxSetFlowControl(); e != 0 {
 		return toErr("SetFlowControl", e)
-	}
-	// Device: Reset mode to setting in EEPROM.
-	if err := d.setBitMode(0, bitModeReset); err != nil {
-		return nil
 	}
 	return nil
 }

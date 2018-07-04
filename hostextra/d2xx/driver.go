@@ -41,8 +41,17 @@ func open(i int) (Dev, error) {
 		return nil, err
 	}
 	if err := h.setupCommon(); err != nil {
-		h.closeDev()
-		return nil, err
+		// setupCommon() takes the device in its previous state. It could be in an
+		// unexpected state, so try resetting it first.
+		if err := h.reset(); err != nil {
+			h.closeDev()
+			return nil, err
+		}
+		if err := h.setupCommon(); err != nil {
+			h.closeDev()
+			return nil, err
+		}
+		// The second attempt worked.
 	}
 	// Makes a copy of the handle.
 	g := generic{index: i, h: *h}

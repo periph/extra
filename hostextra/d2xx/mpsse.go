@@ -161,15 +161,23 @@ func (d *device) setupMPSSE() error {
 	// Pre-state:
 	// - Write EEPROM i.IsFifo = true so the device DBus is started in tristate.
 
-	// Enable the MPSSE controller.
-	if err := d.setBitMode(0, 2); err != nil {
-		return err
-	}
-	if err := d.mpsseVerify(); err != nil {
-		return err
+	// Try to verify the MPSSE controller without initializing it first. This is
+	// the 'happy path', which enables reusing the device is its current state
+	// without affecting current GPIO state.
+	if d.mpsseVerify() != nil {
+		// Enable the MPSSE controller.
+		if err := d.setBitMode(0, 2); err != nil {
+			return err
+		}
+		if err := d.mpsseVerify(); err != nil {
+			return err
+		}
 	}
 
 	// Initialize MPSSE to a known state.
+	// Reset the clock since it is impossible to read back the current clock rate.
+	// Reset all the GPIOs are inputs since it is impossible to read back the
+	// state of each GPIO (if they are input or output).
 	cmd := []byte{
 		clock30MHz, clockNormal, clock2Phase, internalLoopbackDisable,
 		gpioSetC, 0xFF, 0x00,
@@ -383,14 +391,14 @@ func (d *device) mpsseDBusRead() (byte, error) {
 //
 // This permits keeping a cache.
 type gpiosMPSSE struct {
+	// Immutable.
 	h    *device
 	cbus bool // false if D bus
+	pins [8]gpioMPSSE
 
 	// Cache of values
 	direction byte
 	value     byte
-
-	pins [8]gpioMPSSE
 }
 
 func (g *gpiosMPSSE) init() {
@@ -451,6 +459,8 @@ func (g *gpiosMPSSE) out(n int, l gpio.Level) error {
 // gpioMPSSE is a GPIO pin on a FTDI device driven via MPSSE.
 //
 // gpioMPSSE implements gpio.PinIO.
+//
+// It is immutable and stateless.
 type gpioMPSSE struct {
 	a   *gpiosMPSSE
 	n   string
