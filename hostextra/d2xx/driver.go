@@ -9,6 +9,7 @@ import (
 
 	"periph.io/x/extra/hostextra/d2xx/ftdi"
 	"periph.io/x/periph"
+	"periph.io/x/periph/conn/gpio/gpioreg"
 	"periph.io/x/periph/conn/i2c/i2creg"
 	"periph.io/x/periph/conn/pin"
 	"periph.io/x/periph/conn/pin/pinreg"
@@ -70,11 +71,17 @@ func open(i int) (Dev, error) {
 // relevant registries.
 func registerDev(d Dev) error {
 	hdr := d.Header()
-	p := make([][]pin.Pin, len(hdr))
-	for i := range hdr {
-		p[i] = []pin.Pin{hdr[i]}
+	for _, p := range hdr {
+		if err := gpioreg.Register(p); err != nil {
+			return err
+		}
 	}
-	if err := pinreg.Register(d.String(), p); err != nil {
+
+	raw := make([][]pin.Pin, len(hdr))
+	for i := range hdr {
+		raw[i] = []pin.Pin{hdr[i]}
+	}
+	if err := pinreg.Register(d.String(), raw); err != nil {
 		return err
 	}
 	switch t := d.(type) {
@@ -85,6 +92,9 @@ func registerDev(d Dev) error {
 		if err := spireg.Register(d.String(), nil, -1, t.SPI); err != nil {
 			return err
 		}
+		// TODO(maruel): UART
+	case *FT232R:
+		// TODO(maruel): SPI, UART
 	}
 	return nil
 }
@@ -120,6 +130,10 @@ func (d *driver) Init() (bool, error) {
 		} else {
 			// Create a shallow broken handle, so the user can learn how to fix the
 			// problem.
+			//
+			// TODO(maruel): On macOS with a FT232R, calling two processes in a row
+			// often results in a broken device on the second process. Figure out why
+			// and make it more resilient.
 			err = err1
 			all = append(all, &broken{index: i, err: err})
 		}
