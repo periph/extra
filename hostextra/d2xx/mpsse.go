@@ -187,32 +187,32 @@ func (d *device) setupMPSSE() error {
 //
 // In practice this takes around 2ms.
 func (d *device) mpsseVerify() error {
-	defer logDefer("mpsseVerify()")()
 	for _, v := range []byte{0xAA, 0xAB} {
 		// Write a bad command and ensure it returned correctly.
 		if _, err := d.write([]byte{v}); err != nil {
-			return err
+			return fmt.Errorf("d2xx: mpsseVerify: %v", err)
 		}
 		// Try for 200ms.
 		var b [2]byte
 		success := false
 		for start := time.Now(); time.Since(start) < 200*time.Millisecond; {
 			if n, err := d.read(b[:]); err != nil {
-				return err
+				return fmt.Errorf("d2xx: mpsseVerify: %v", err)
 			} else if n == 0 {
 				// Slow down the busy loop a little.
-				time.Sleep(100 * time.Microsecond)
+				// TODO(maruel): Use FT_SetEventNotification().
+				time.Sleep(10 * time.Microsecond)
 				continue
 			}
 			// 0xFA means invalid command, 0xAA is the command echoed back.
 			if b[0] != 0xFA || b[1] != v {
-				return toErr("SetupMPSSE", 4)
+				return fmt.Errorf("d2xx: mpsseVerify: failed test for byte %#x: %#x", v, b)
 			}
 			success = true
 			break
 		}
 		if !success {
-			return fmt.Errorf("d2xx: I/O failure while trying to setup MPSSE: %v", b[:])
+			return fmt.Errorf("d2xx: mpsseVerify: failed test for byte %#x", v)
 		}
 	}
 	return nil

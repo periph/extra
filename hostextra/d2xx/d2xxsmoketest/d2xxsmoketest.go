@@ -49,17 +49,16 @@ func (s *SmokeTest) Run(f *flag.FlagSet, args []string) (err error) {
 		if d, ok := dev.(*d2xx.FT232H); ok {
 			return testFT232H(d)
 		}
-		return fmt.Errorf("expected %s, got %T", *devType, dev)
 	case "ft232r":
 		if d, ok := dev.(*d2xx.FT232R); ok {
 			return testFT232R(d)
 		}
-		return fmt.Errorf("expected %s, got %T", *devType, dev)
 	case "":
 		return errors.New("-type is required")
 	default:
 		return errors.New("unrecognized -type, only ft232h and ft232r are supported")
 	}
+	return fmt.Errorf("expected %s, got %T; %s", *devType, dev, dev.String())
 }
 
 func testFT232H(d *d2xx.FT232H) error {
