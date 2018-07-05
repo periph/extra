@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"periph.io/x/extra/hostextra/d2xx/ftdi"
-	"periph.io/x/periph/conn/gpio/gpioreg"
 )
 
 func TestDriver(t *testing.T) {
@@ -108,24 +107,6 @@ func (d *d2xxFakeHandle) d2xxSetBitMode(mask, mode byte) int {
 
 func reset(t *testing.T) {
 	drv.reset()
-	for _, p := range gpioreg.Aliases() {
-		if err := gpioreg.Unregister(p.Name()); err != nil {
-			t.Fatal(err)
-		}
-	}
-	for _, p := range gpioreg.All() {
-		if err := gpioreg.Unregister(p.Name()); err != nil {
-			t.Fatal(err)
-		}
-	}
-	/*
-		// TODO(maruel): Oops.
-		for name := range pinreg.All() {
-			if err := pinreg.Unregister(name); err != nil {
-				t.Fatal(err)
-			}
-		}
-	*/
 }
 
 func init() {

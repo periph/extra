@@ -6,6 +6,7 @@ package d2xx
 
 import (
 	"errors"
+	"strconv"
 	"sync"
 
 	"periph.io/x/extra/hostextra/d2xx/ftdi"
@@ -210,11 +211,11 @@ func newFT232H(g generic) (*FT232H, error) {
 		generic: g,
 		cbus:    gpiosMPSSE{h: &g.h, cbus: true},
 		dbus:    gpiosMPSSE{h: &g.h},
-		c8:      invalidPin{num: 16, n: "C8"}, // , dp: gpio.PullUp
-		c9:      invalidPin{num: 17, n: "C9"}, // , dp: gpio.PullUp
+		c8:      invalidPin{num: 16, n: g.name + ".C8"}, // , dp: gpio.PullUp
+		c9:      invalidPin{num: 17, n: g.name + ".C9"}, // , dp: gpio.PullUp
 	}
-	f.cbus.init()
-	f.dbus.init()
+	f.cbus.init(f.name)
+	f.dbus.init(f.name)
 	f.dbus.pins[0].dp = gpio.Float
 	f.dbus.pins[2].dp = gpio.Float
 	f.dbus.pins[4].dp = gpio.Float
@@ -417,28 +418,18 @@ func (f *FT232H) SPI() (spi.PortCloser, error) {
 func newFT232R(g generic) (*FT232R, error) {
 	f := &FT232R{
 		generic: g,
-		dbus: [...]syncPin{
-			{num: 0, n: "D0/TX"},
-			{num: 1, n: "D1/RX"},
-			{num: 2, n: "D2/RTS"},
-			{num: 3, n: "D3/CTS"},
-			{num: 4, n: "D4/DTR"},
-			{num: 5, n: "D5/DSR"},
-			{num: 6, n: "D6/DCD"},
-			{num: 7, n: "D7/RI"},
-		},
-		cbus: [...]cbusPin{
-			{num: 8, n: "C0", p: gpio.PullUp},
-			{num: 9, n: "C1", p: gpio.PullUp},
-			{num: 10, n: "C2", p: gpio.PullUp},
-			{num: 11, n: "C3", p: gpio.Float},
-		},
+		dbus:    [...]syncPin{{num: 0}, {num: 1}, {num: 2}, {num: 3}, {num: 4}, {num: 5}, {num: 6}, {num: 7}},
+		cbus:    [...]cbusPin{{num: 8, p: gpio.PullUp}, {num: 9, p: gpio.PullUp}, {num: 10, p: gpio.PullUp}, {num: 11, p: gpio.Float}},
 	}
+	// Use the UART names, as this is how all FT232R boards are marked.
+	dnames := [...]string{"TX", "RX", "RTS", "CTS", "DTR", "DSR", "DCD", "RI"}
 	for i := range f.dbus {
+		f.dbus[i].n = f.name + "." + dnames[i]
 		f.dbus[i].bus = f
 		f.hdr[i] = &f.dbus[i]
 	}
 	for i := range f.cbus {
+		f.cbus[i].n = f.name + ".C" + strconv.Itoa(i)
 		f.cbus[i].bus = f
 		f.hdr[i+8] = &f.cbus[i]
 	}
@@ -639,8 +630,6 @@ func (f *FT232R) SPI() (spi.PortCloser, error) {
 func (f *FT232R) syncBusGPIOFunc(n int) string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	// TODO(maruel): Once UART is supported:
-	// func := []string{"TX", "RX", "RTS", "CTS", "DTR", "DSR", "DCD", "RI"}
 	if f.usingSPI {
 		switch n {
 		case 0:

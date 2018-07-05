@@ -50,7 +50,12 @@ func open(opener func(i int) (d2xxHandle, int), i int) (Dev, error) {
 		// The second attempt worked.
 	}
 	// Makes a copy of the handle.
-	g := generic{index: i, h: *h, name: h.t.String() + "(" + strconv.Itoa(i) + ")"}
+	g := generic{index: i, h: *h, name: h.t.String()}
+	if i > 0 {
+		// When more than one device is present, add "(index)" suffix.
+		// TODO(maruel): Using the serial number would be nicer than a number.
+		g.name += "(" + strconv.Itoa(i) + ")"
+	}
 	// Makes a copy of the generic instance.
 	switch g.h.t {
 	case ftdi.FT232H:
@@ -74,27 +79,43 @@ func open(opener func(i int) (d2xxHandle, int), i int) (Dev, error) {
 
 // registerDev registers the header and supported buses and ports in the
 // relevant registries.
-func registerDev(d Dev) error {
+func registerDev(d Dev, multi bool) error {
+	name := d.String()
 	hdr := d.Header()
+
+	// Register the GPIOs.
 	for _, p := range hdr {
 		if err := gpioreg.Register(p); err != nil {
 			return err
 		}
 	}
+	if !multi {
+		// Register shorthands.
+		// The "." used here vs the "_" used in pinreg is unfortunate. Investigate
+		// a better way.
+		prefix := len(name) + 1
+		for _, p := range hdr {
+			n := p.Name()
+			if err := gpioreg.RegisterAlias(n[prefix:], n); err != nil {
+				return err
+			}
+		}
+	}
 
+	// Register the header.
 	raw := make([][]pin.Pin, len(hdr))
 	for i := range hdr {
 		raw[i] = []pin.Pin{hdr[i]}
 	}
-	if err := pinreg.Register(d.String(), raw); err != nil {
+	if err := pinreg.Register(name, raw); err != nil {
 		return err
 	}
 	switch t := d.(type) {
 	case *FT232H:
-		if err := i2creg.Register(d.String(), nil, -1, t.I2C); err != nil {
+		if err := i2creg.Register(name, nil, -1, t.I2C); err != nil {
 			return err
 		}
-		if err := spireg.Register(d.String(), nil, -1, t.SPI); err != nil {
+		if err := spireg.Register(name, nil, -1, t.SPI); err != nil {
 			return err
 		}
 		// TODO(maruel): UART
@@ -129,11 +150,12 @@ func (d *driver) Init() (bool, error) {
 	if err != nil {
 		return true, err
 	}
+	multi := num > 1
 	for i := 0; i < num; i++ {
 		// TODO(maruel): Close the device one day. :)
 		if dev, err1 := open(d.d2xxOpen, i); err1 == nil {
 			d.all = append(d.all, dev)
-			if err := registerDev(dev); err != nil {
+			if err := registerDev(dev, multi); err != nil {
 				return true, err
 			}
 		} else {

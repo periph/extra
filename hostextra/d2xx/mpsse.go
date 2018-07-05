@@ -401,14 +401,14 @@ type gpiosMPSSE struct {
 	value     byte
 }
 
-func (g *gpiosMPSSE) init() {
+func (g *gpiosMPSSE) init(name string) {
 	s := "D"
 	if g.cbus {
 		s = "C"
 	}
 	for i := range g.pins {
 		g.pins[i].a = g
-		g.pins[i].n = s + strconv.Itoa(i)
+		g.pins[i].n = name + "." + s + strconv.Itoa(i)
 		g.pins[i].num = i
 		g.pins[i].dp = gpio.PullUp
 	}
