@@ -427,9 +427,6 @@ type d2xxLoggingHandle struct {
 // log10 is a cheap way to find the most significant digit
 func log10(i int64) uint {
 	switch {
-	case i <= 0:
-		// TODO(maruel): Implement
-		return 0
 	case i < 10:
 		return 0
 	case i < 100:
@@ -463,7 +460,7 @@ func log10(i int64) uint {
 	case i < 10000000000000000:
 		return 15
 	default:
-		return 0
+		return 16
 	}
 }
 
