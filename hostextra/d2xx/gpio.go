@@ -14,53 +14,53 @@ import (
 	"periph.io/x/periph/conn/physic"
 )
 
-// syncBusGPIO is the handler of a synchronous bitbang bus.
+// dbusSync is the handler of a synchronous bitbang on DBus.
 //
 // More details at:
 // http://www.ftdichip.com/Support/Documents/AppNotes/AN_232R-01_Bit_Bang_Mode_Available_For_FT232R_and_Ft245R.pdf
-type syncBusGPIO interface {
-	syncBusGPIOFunc(n int) string
-	syncBusGPIOIn(n int) error
-	syncBusGPIORead(n int) gpio.Level
-	syncBusGPIOOut(n int, l gpio.Level) error
+type dbusSync interface {
+	dbusSyncGPIOFunc(n int) string
+	dbusSyncGPIOIn(n int) error
+	dbusSyncGPIORead(n int) gpio.Level
+	dbusSyncGPIOOut(n int, l gpio.Level) error
 }
 
-// syncPin represents a GPIO on a synchronous bitbang bus.
+// dbusPinSync represents a GPIO on a synchronous bitbang DBus.
 //
 // It is immutable and stateless.
-type syncPin struct {
+type dbusPinSync struct {
 	n   string
 	num int
-	bus syncBusGPIO
+	bus dbusSync
 }
 
 // String implements conn.Resource.
-func (s *syncPin) String() string {
+func (s *dbusPinSync) String() string {
 	return s.n
 }
 
 // Halt implements conn.Resource.
-func (s *syncPin) Halt() error {
+func (s *dbusPinSync) Halt() error {
 	return nil
 }
 
 // Name implements pin.Pin.
-func (s *syncPin) Name() string {
+func (s *dbusPinSync) Name() string {
 	return s.n
 }
 
 // Number implements pin.Pin.
-func (s *syncPin) Number() int {
+func (s *dbusPinSync) Number() int {
 	return s.num
 }
 
 // Function implements pin.Pin.
-func (s *syncPin) Function() string {
-	return s.bus.syncBusGPIOFunc(s.num)
+func (s *dbusPinSync) Function() string {
+	return s.bus.dbusSyncGPIOFunc(s.num)
 }
 
 // In implements gpio.PinIn.
-func (s *syncPin) In(pull gpio.Pull, e gpio.Edge) error {
+func (s *dbusPinSync) In(pull gpio.Pull, e gpio.Edge) error {
 	if e != gpio.NoEdge {
 		// We could support it on D5.
 		return errors.New("d2xx: edge triggering is not supported")
@@ -69,21 +69,21 @@ func (s *syncPin) In(pull gpio.Pull, e gpio.Edge) error {
 		// EEPROM has a PullDownEnable flag.
 		return errors.New("d2xx: pull is not supported")
 	}
-	return s.bus.syncBusGPIOIn(s.num)
+	return s.bus.dbusSyncGPIOIn(s.num)
 }
 
 // Read implements gpio.PinIn.
-func (s *syncPin) Read() gpio.Level {
-	return s.bus.syncBusGPIORead(s.num)
+func (s *dbusPinSync) Read() gpio.Level {
+	return s.bus.dbusSyncGPIORead(s.num)
 }
 
 // WaitForEdge implements gpio.PinIn.
-func (s *syncPin) WaitForEdge(t time.Duration) bool {
+func (s *dbusPinSync) WaitForEdge(t time.Duration) bool {
 	return false
 }
 
 // DefaultPull implements gpio.PinIn.
-func (s *syncPin) DefaultPull() gpio.Pull {
+func (s *dbusPinSync) DefaultPull() gpio.Pull {
 	// 200kΩ
 	// http://www.ftdichip.com/Support/Documents/DataSheets/ICs/DS_FT232R.pdf
 	// p. 24
@@ -91,33 +91,33 @@ func (s *syncPin) DefaultPull() gpio.Pull {
 }
 
 // Pull implements gpio.PinIn.
-func (s *syncPin) Pull() gpio.Pull {
+func (s *dbusPinSync) Pull() gpio.Pull {
 	return gpio.PullUp
 }
 
 // Out implements gpio.PinOut.
-func (s *syncPin) Out(l gpio.Level) error {
-	return s.bus.syncBusGPIOOut(s.num, l)
+func (s *dbusPinSync) Out(l gpio.Level) error {
+	return s.bus.dbusSyncGPIOOut(s.num, l)
 }
 
 // PWM implements gpio.PinOut.
-func (s *syncPin) PWM(d gpio.Duty, f physic.Frequency) error {
+func (s *dbusPinSync) PWM(d gpio.Duty, f physic.Frequency) error {
 	return errors.New("d2xx: not implemented")
 }
 
 /*
-func (s *syncPin) Drive() physic.ElectricCurrent {
+func (s *dbusPinSync) Drive() physic.ElectricCurrent {
 	// optionally 3
 	//return s.bus.ee.DDriveCurrent * physic.MilliAmpere
 	return physic.MilliAmpere
 }
 
-func (s *syncPin) SlewLimit() bool {
+func (s *dbusPinSync) SlewLimit() bool {
 	//return s.bus.ee.DSlowSlew
 	return false
 }
 
-func (s *syncPin) Hysteresis() bool {
+func (s *dbusPinSync) Hysteresis() bool {
 	//return s.bus.ee.DSchmittInput
 	return true
 }
@@ -237,5 +237,5 @@ func (c *cbusPin) Hysteresis() bool {
 }
 */
 
-var _ gpio.PinIO = &syncPin{}
+var _ gpio.PinIO = &dbusPinSync{}
 var _ gpio.PinIO = &cbusPin{}

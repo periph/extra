@@ -418,7 +418,7 @@ func (f *FT232H) SPI() (spi.PortCloser, error) {
 func newFT232R(g generic) (*FT232R, error) {
 	f := &FT232R{
 		generic: g,
-		dbus:    [...]syncPin{{num: 0}, {num: 1}, {num: 2}, {num: 3}, {num: 4}, {num: 5}, {num: 6}, {num: 7}},
+		dbus:    [...]dbusPinSync{{num: 0}, {num: 1}, {num: 2}, {num: 3}, {num: 4}, {num: 5}, {num: 6}, {num: 7}},
 		cbus:    [...]cbusPin{{num: 8, p: gpio.PullUp}, {num: 9, p: gpio.PullUp}, {num: 10, p: gpio.PullUp}, {num: 11, p: gpio.Float}},
 	}
 	// Use the UART names, as this is how all FT232R boards are marked.
@@ -524,13 +524,14 @@ type FT232R struct {
 	C2 gpio.PinIO
 	C3 gpio.PinIO
 
-	dbus [8]syncPin
+	dbus [8]dbusPinSync
 	cbus [4]cbusPin
 	hdr  [12]gpio.PinIO
 
 	// Mutable.
 	mu         sync.Mutex
 	usingSPI   bool
+	usingCBus  bool
 	s          spiSyncPort
 	dmask      uint8 // 0 input, 1 output
 	dvalue     uint8
@@ -625,9 +626,9 @@ func (f *FT232R) SPI() (spi.PortCloser, error) {
 	return &f.s, nil
 }
 
-// syncBusGPIOFunc implements syncBusGPIO. It returns the function of a GPIO
+// dbusSyncGPIOFunc implements dbusSync. It returns the function of a GPIO
 // pin.
-func (f *FT232R) syncBusGPIOFunc(n int) string {
+func (f *FT232R) dbusSyncGPIOFunc(n int) string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.usingSPI {
@@ -646,11 +647,11 @@ func (f *FT232R) syncBusGPIOFunc(n int) string {
 	if f.dmask&mask != 0 {
 		return "Out/" + gpio.Level(f.dvalue&mask != 0).String()
 	}
-	return "In/" + f.syncBusReadLocked(n).String()
+	return "In/" + f.dbusSyncReadLocked(n).String()
 }
 
-// syncBusGPIOIn implements syncBusGPIO.
-func (f *FT232R) syncBusGPIOIn(n int) error {
+// dbusSyncGPIOIn implements dbusSync.
+func (f *FT232R) dbusSyncGPIOIn(n int) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	// TODO(maruel): if f.usingSPI && n < 4.
@@ -667,14 +668,14 @@ func (f *FT232R) syncBusGPIOIn(n int) error {
 	return nil
 }
 
-// syncBusGPIORead implements syncBusGPIO.
-func (f *FT232R) syncBusGPIORead(n int) gpio.Level {
+// dbusSyncGPIORead implements dbusSync.
+func (f *FT232R) dbusSyncGPIORead(n int) gpio.Level {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return f.syncBusReadLocked(n)
+	return f.dbusSyncReadLocked(n)
 }
 
-func (f *FT232R) syncBusReadLocked(n int) gpio.Level {
+func (f *FT232R) dbusSyncReadLocked(n int) gpio.Level {
 	// In synchronous mode, to read we must write first to for a sample.
 	b := [1]byte{f.dvalue}
 	if _, err := f.h.write(b[:]); err != nil {
@@ -688,8 +689,8 @@ func (f *FT232R) syncBusReadLocked(n int) gpio.Level {
 	return f.dvalue&mask != 0
 }
 
-// syncBusGPIOOut implements syncBusGPIO.
-func (f *FT232R) syncBusGPIOOut(n int, l gpio.Level) error {
+// dbusSyncGPIOOut implements dbusSync.
+func (f *FT232R) dbusSyncGPIOOut(n int, l gpio.Level) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	mask := uint8(1 << uint(n))
