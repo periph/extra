@@ -290,7 +290,7 @@ func (s *spiSyncPort) String() string {
 	return s.c.f.String()
 }
 
-const ft232rMaxSpeed = 3*physic.MegaHertz + 50*physic.KiloHertz
+const ft232rMaxSpeed = 3 * physic.MegaHertz
 
 // Connect implements spi.Port.
 func (s *spiSyncPort) Connect(f physic.Frequency, m spi.Mode, bits int) (spi.Conn, error) {

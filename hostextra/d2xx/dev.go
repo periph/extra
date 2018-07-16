@@ -617,6 +617,9 @@ func (f *FT232R) setDBusMaskLocked(mask uint8) error {
 }
 
 func (f *FT232R) txLocked(w, r []byte) error {
+	// Investigate FT232R clock issue:
+	// http://developer.intra2net.com/mailarchive/html/libftdi/2010/msg00240.html
+
 	// The FT232R has 128 bytes TX buffer and 256 bytes RX buffer. Chunk into 64
 	// bytes chunks. That's half the buffer size of the TX buffer and permits
 	// pipelining and removes the risk of buffer overrun. This is important
