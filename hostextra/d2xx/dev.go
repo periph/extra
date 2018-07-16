@@ -470,8 +470,8 @@ func newFT232R(g generic) (*FT232R, error) {
 	if f.cbusnibble, err = f.h.getBitMode(); err != nil {
 		return nil, err
 	}
-	// Set all DBus as synchronous bitbang, everything as input.
-	if err := f.h.setBitMode(0, bitModeSyncBitbang); err != nil {
+	// Set all DBus as asynchronous bitbang, everything as input.
+	if err := f.h.setBitMode(0, bitModeAsyncBitbang); err != nil {
 		return nil, err
 	}
 	// And read their value.
@@ -608,7 +608,7 @@ func (f *FT232R) SPI() (spi.PortCloser, error) {
 // setDBusMaskLocked is the locked version of SetDBusMask.
 func (f *FT232R) setDBusMaskLocked(mask uint8) error {
 	if mask != f.dmask {
-		if err := f.h.setBitMode(mask, bitModeSyncBitbang); err != nil {
+		if err := f.h.setBitMode(mask, bitModeAsyncBitbang); err != nil {
 			return err
 		}
 		f.dmask = mask
@@ -617,13 +617,20 @@ func (f *FT232R) setDBusMaskLocked(mask uint8) error {
 }
 
 func (f *FT232R) txLocked(w, r []byte) error {
-	// Chunk into 64 bytes chunks. That's half the buffer size of the chip.
-	// TODO(maruel): Determine what's optimal.
-	const chunk = 64
-	var scratch [chunk]byte
+	// The FT232R has 128 bytes TX buffer and 256 bytes RX buffer. Chunk into 64
+	// bytes chunks. That's half the buffer size of the TX buffer and permits
+	// pipelining and removes the risk of buffer overrun. This is important
+	// otherwise there's huge gaps due to the USB transmit overhead.
+	// TODO(maruel): Determine what's optimal via experimentation.
+	chunk := 64
+	var scratch [128]byte
 	if len(w) == 0 {
 		// Read only.
+		for i := range scratch {
+			scratch[i] = f.dvalue
+		}
 		for len(r) != 0 {
+			// TODO(maruel): Optimize.
 			c := len(r)
 			if c > chunk {
 				c = chunk
@@ -638,6 +645,8 @@ func (f *FT232R) txLocked(w, r []byte) error {
 		}
 	} else if len(r) == 0 {
 		// Write only.
+		// The first write is 128 bytes to fill the buffer.
+		chunk = 128
 		for len(w) != 0 {
 			c := len(w)
 			if c > chunk {
@@ -646,26 +655,50 @@ func (f *FT232R) txLocked(w, r []byte) error {
 			if _, err := f.h.write(w[:c]); err != nil {
 				return err
 			}
-			if _, err := f.h.read(scratch[:c]); err != nil {
+			w = w[c:]
+			chunk = 64
+		}
+		/*
+			// Let the USB drive pace it.
+			if _, err := f.h.write(w); err != nil {
 				return err
 			}
-			w = w[c:]
-		}
+		*/
 	} else {
 		// R/W.
-		for len(w) != 0 {
-			c := len(w)
-			if c > chunk {
-				c = chunk
+		// Always write one 'w' ahead.
+		// The first write is 128 bytes to fill the buffer.
+		chunk = 128
+		cw := len(w)
+		if cw > chunk {
+			cw = chunk
+		}
+		if _, err := f.h.write(w[:cw]); err != nil {
+			return err
+		}
+		w = w[cw:]
+		chunk = 64
+		for len(r) != 0 {
+			// Read then write.
+			cr := len(r)
+			if cr > chunk {
+				cr = chunk
 			}
-			if _, err := f.h.write(w[:c]); err != nil {
+			if _, err := f.h.read(r[:cr]); err != nil {
 				return err
 			}
-			if _, err := f.h.read(r[:c]); err != nil {
-				return err
+			r = r[cr:]
+
+			cw = len(w)
+			if cw > chunk {
+				cw = chunk
 			}
-			w = w[c:]
-			r = r[c:]
+			if cw != 0 {
+				if _, err := f.h.write(w[:cw]); err != nil {
+					return err
+				}
+				w = w[cw:]
+			}
 		}
 	}
 	return nil
@@ -706,7 +739,7 @@ func (f *FT232R) dbusSyncGPIOIn(n int) error {
 		return nil
 	}
 	v := f.dmask &^ mask
-	if err := f.h.setBitMode(v, bitModeSyncBitbang); err != nil {
+	if err := f.h.setBitMode(v, bitModeAsyncBitbang); err != nil {
 		return err
 	}
 	f.dmask = v
@@ -742,7 +775,7 @@ func (f *FT232R) dbusSyncGPIOOut(n int, l gpio.Level) error {
 	if f.dmask&mask != 1 {
 		// Was input.
 		v := f.dmask | mask
-		if err := f.h.setBitMode(v, bitModeSyncBitbang); err != nil {
+		if err := f.h.setBitMode(v, bitModeAsyncBitbang); err != nil {
 			return err
 		}
 		f.dmask = v

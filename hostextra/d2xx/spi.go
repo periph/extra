@@ -34,6 +34,9 @@ type spiMPSEEPort struct {
 func (s *spiMPSEEPort) Close() error {
 	s.c.f.mu.Lock()
 	s.c.f.usingSPI = false
+	s.maxFreq = 0
+	s.c.ew = gpio.FallingEdge
+	s.c.er = gpio.RisingEdge
 	s.c.f.mu.Unlock()
 	return nil
 }
@@ -214,6 +217,12 @@ type spiSyncPort struct {
 func (s *spiSyncPort) Close() error {
 	s.c.f.mu.Lock()
 	s.c.f.usingSPI = false
+	s.maxFreq = 0
+	s.c.edgeInvert = false
+	s.c.clkActiveLow = false
+	s.c.noCS = false
+	s.c.lsbFirst = false
+	s.c.halfDuplex = false
 	s.c.f.mu.Unlock()
 	return nil
 }
@@ -227,12 +236,12 @@ const ft232rMaxSpeed = 3*physic.MegaHertz + 50*physic.KiloHertz
 // Connect implements spi.Port.
 func (s *spiSyncPort) Connect(f physic.Frequency, m spi.Mode, bits int) (spi.Conn, error) {
 	if f > physic.GigaHertz {
-		return nil, fmt.Errorf("d2xx: invalid speed %s; maximum supported clock is 3MHz", f)
+		return nil, fmt.Errorf("d2xx: invalid speed %s; maximum supported clock is 1.5MHz", f)
 	}
-	if f > ft232rMaxSpeed {
+	if f > ft232rMaxSpeed/2 {
 		// TODO(maruel): Figure out a way to communicate that the speed was lowered.
 		// https://github.com/google/periph/issues/255
-		f = ft232rMaxSpeed
+		f = ft232rMaxSpeed / 2
 	}
 	if f < 100*physic.Hertz {
 		return nil, fmt.Errorf("d2xx: invalid speed %s; minimum supported clock is 100Hz; did you forget to multiply by physic.MegaHertz?", f)
@@ -243,19 +252,12 @@ func (s *spiSyncPort) Connect(f physic.Frequency, m spi.Mode, bits int) (spi.Con
 
 	s.c.f.mu.Lock()
 	defer s.c.f.mu.Unlock()
-	if m&spi.NoCS != 0 {
-		s.c.noCS = true
-		m &^= spi.NoCS
-	}
-	if m&spi.HalfDuplex != 0 {
-		s.c.halfDuplex = true
-		m &^= spi.HalfDuplex
+	s.c.noCS = m&spi.NoCS != 0
+	s.c.halfDuplex = m&spi.HalfDuplex != 0
+	s.c.lsbFirst = m&spi.LSBFirst != 0
+	m &^= spi.NoCS | spi.HalfDuplex | spi.LSBFirst
+	if s.c.halfDuplex {
 		return nil, errors.New("d2xx: spi.HalfDuplex is not yet supported (implementing wouldn't be too hard, please submit a PR")
-	}
-	if m&spi.LSBFirst != 0 {
-		s.c.lsbFirst = true
-		m &^= spi.LSBFirst
-		return nil, errors.New("d2xx: spi.LSBFirst is not yet supported (implementing wouldn't be too hard, please submit a PR")
 	}
 	if m < 0 || m > 3 {
 		return nil, errors.New("d2xx: unknown mode")
@@ -263,7 +265,7 @@ func (s *spiSyncPort) Connect(f physic.Frequency, m spi.Mode, bits int) (spi.Con
 	s.c.edgeInvert = m&1 != 0
 	s.c.clkActiveLow = m&2 != 0
 	if s.maxFreq == 0 || f < s.maxFreq {
-		if err := s.c.f.SetSpeed(f); err != nil {
+		if err := s.c.f.SetSpeed(f * 2); err != nil {
 			return nil, err
 		}
 		s.maxFreq = f
@@ -273,7 +275,8 @@ func (s *spiSyncPort) Connect(f physic.Frequency, m spi.Mode, bits int) (spi.Con
 	if err := s.c.f.setDBusMaskLocked(mask); err != nil {
 		return nil, err
 	}
-	// TODO(maruel): Combine both following calls if possible.
+	// TODO(maruel): Combine both following calls if possible. We'd shave off a
+	// few ms.
 	if !s.c.noCS {
 		// CTS/SPI_CS is active low.
 		if err := s.c.f.dbusSyncGPIOOutLocked(3, gpio.High); err != nil {
@@ -293,7 +296,7 @@ func (s *spiSyncPort) Connect(f physic.Frequency, m spi.Mode, bits int) (spi.Con
 // LimitSpeed implements spi.Port.
 func (s *spiSyncPort) LimitSpeed(f physic.Frequency) error {
 	if f > physic.GigaHertz {
-		return fmt.Errorf("d2xx: invalid speed %s; maximum supported clock is 3MHz", f)
+		return fmt.Errorf("d2xx: invalid speed %s; maximum supported clock is 1.5MHz", f)
 	}
 	if f < 100*physic.Hertz {
 		return fmt.Errorf("d2xx: invalid speed %s; minimum supported clock is 100Hz; did you forget to multiply by physic.MegaHertz?", f)
@@ -303,7 +306,7 @@ func (s *spiSyncPort) LimitSpeed(f physic.Frequency) error {
 	if s.maxFreq != 0 && s.maxFreq <= f {
 		return nil
 	}
-	if err := s.c.f.SetSpeed(s.maxFreq); err == nil {
+	if err := s.c.f.SetSpeed(f * 2); err == nil {
 		s.maxFreq = f
 	}
 	return nil
@@ -336,9 +339,9 @@ type spiSyncConn struct {
 	// Initialized at Connect().
 	edgeInvert   bool // CPHA=1
 	clkActiveLow bool // CPOL=1
-	noCS         bool
-	lsbFirst     bool
-	halfDuplex   bool
+	noCS         bool // CS line is not changed
+	lsbFirst     bool // Default is MSB first
+	halfDuplex   bool // 3 wire mode
 }
 
 func (s *spiSyncConn) String() string {
@@ -356,10 +359,10 @@ func (s *spiSyncConn) Duplex() conn.Duplex {
 }
 
 func (s *spiSyncConn) TxPackets(pkts []spi.Packet) error {
-	// We need to 'expand' each bit 4 times * 8 bits, which leads
-	// to a 32x memory usage increase.
-	// TODO(maruel): It could be possible to lower to 2*8 but starting 'safe'.
-	total := 0
+	// We need to 'expand' each bit 2 times * 8 bits, which leads
+	// to a 16x memory usage increase. Adds 5 samples before and after.
+	totalW := 0
+	totalR := 0
 	for _, p := range pkts {
 		if p.BitsPerWord&7 != 0 {
 			return errors.New("d2xx: bits must be a multiple of 8")
@@ -367,22 +370,29 @@ func (s *spiSyncConn) TxPackets(pkts []spi.Packet) error {
 		if err := verifyBuffers(p.W, p.R); err != nil {
 			return err
 		}
+		// TODO(maruel): Correctly calculate offsets.
 		if len(p.W) != 0 {
-			total += 4 * 8 * len(p.W)
-		} else {
-			total += 4 * 8 * len(p.R)
+			totalW += 2 * 8 * len(p.W)
+		}
+		if len(p.R) != 0 {
+			totalR += 2 * 8 * len(p.R)
 		}
 	}
-	if !s.noCS {
-		total += 10
-	}
-	// Create a large, single chunk.
 
-	we := make([]byte, 0, total)
-	re := make([]byte, total)
-	const mosi = byte(0) // TX
-	const clk = byte(2)  // RTS
-	const cs = byte(3)   // CTS
+	// Create a large, single chunk.
+	var we, re []byte
+	if totalW != 0 {
+		totalW += 10
+		we = make([]byte, 0, totalW)
+	}
+	if totalR != 0 {
+		totalR += 10
+		re = make([]byte, totalR)
+	}
+	const mosi = byte(1) << 0 // TX
+	const miso = byte(1) << 1 // RX
+	const clk = byte(1) << 2  // RTS
+	const cs = byte(1) << 3   // CTS
 
 	s.f.mu.Lock()
 	defer s.f.mu.Unlock()
@@ -392,69 +402,72 @@ func (s *spiSyncConn) TxPackets(pkts []spi.Packet) error {
 	csActive := s.f.dvalue & s.f.dmask & 0xF0
 	csIdle := csActive
 	if !s.noCS {
-		csIdle = csActive | byte(1)<<3
+		csIdle = csActive | cs
 	}
-	// RTS/SPI_CLK
-	clkIdle := csActive | byte(0)
-	clkActive := clkIdle | byte(1)<<2
+	clkIdle := csActive
+	clkActive := clkIdle | clk
 	if s.clkActiveLow {
 		clkActive, clkIdle = clkIdle, clkActive
-		csIdle |= byte(1) << 2
+		csIdle |= clk
 	}
 	// Start of tx; assert CS if needed.
-	if !s.noCS {
-		we = append(we, csIdle, clkIdle, clkIdle, clkIdle, clkIdle)
-	}
+	we = append(we, csIdle, clkIdle, clkIdle, clkIdle, clkIdle)
 	for _, p := range pkts {
 		if len(p.W) == 0 && len(p.R) == 0 {
 			continue
 		}
 		// TODO(maruel): halfDuplex.
 		for _, b := range p.W {
-			// TODO(maruel): lsbFirst.
 			for j := uint(0); j < 8; j++ {
 				// For each bit, handle clock phase and data phase.
 				bit := byte(0)
-				// MSB
-				if b&0x80>>j != 0 {
-					bit = byte(1) << 0 // TX/SPI_MOSI
+				if !s.lsbFirst {
+					// MSBF
+					if b&(0x80>>j) != 0 {
+						bit = mosi
+					}
+				} else {
+					// LSBF
+					if b&(1<<j) != 0 {
+						bit = mosi
+					}
 				}
 				if !s.edgeInvert {
 					// Mode0/2; CPHA=0
-					we = append(we, clkIdle|bit, clkActive|bit, clkActive|bit, clkIdle)
+					we = append(we, clkIdle|bit, clkActive|bit)
 				} else {
 					// Mode1/3; CPHA=1
-					we = append(we, clkIdle, clkActive|bit, clkActive|bit, clkIdle|bit)
+					we = append(we, clkActive|bit, clkIdle|bit)
 				}
 			}
 		}
-		// TODO(maruel): Deassert CS.
 	}
 	// End of tx; deassert CS.
-	if !s.noCS {
-		we = append(we, clkIdle, clkIdle, clkIdle, clkIdle, csIdle)
-	}
+	we = append(we, clkIdle, clkIdle, clkIdle, clkIdle, csIdle)
 
 	if err := s.f.txLocked(we, re); err != nil {
 		return err
 	}
-	off := 1
-	if s.edgeInvert {
-		off = 3
-	}
+
+	// Extract data from re into r.
 	for _, p := range pkts {
+		// TODO(maruel): Correctly calculate offsets.
 		if len(p.W) == 0 && len(p.R) == 0 {
 			continue
 		}
-		// TODO(maruel): Extract data from re into r.
 		// TODO(maruel): halfDuplex.
-		// TODO(maruel): lsbFirst.
 		for i := range p.R {
 			// For each bit, read at the right data phase.
 			b := byte(0)
 			for j := 0; j < 8; j++ {
-				if re[5+i*8*4+j*4+off]&byte(1)<<1 != 0 {
-					b |= 0x80 >> uint(j)
+				if re[5+i*8*2+j*2+1]&byte(1)<<1 != 0 {
+					if !s.lsbFirst {
+						// MSBF
+						b |= 0x80 >> uint(j)
+					} else {
+						// LSBF
+						b |= 1 << uint(j)
+					}
 				}
 			}
 			p.R[i] = b
@@ -498,6 +511,7 @@ func verifyBuffers(w, r []byte) error {
 			return errors.New("d2xx: maximum buffer size is 64Kb")
 		}
 	} else if len(r) != 0 {
+		// TODO(maruel): Remove, this is not a problem.
 		if len(r) > 65536 {
 			return errors.New("d2xx: maximum buffer size is 64Kb")
 		}
