@@ -222,10 +222,17 @@ func (s *spiSyncPort) String() string {
 	return s.c.f.String()
 }
 
+const ft232rMaxSpeed = 3*physic.MegaHertz + 50*physic.KiloHertz
+
 // Connect implements spi.Port.
 func (s *spiSyncPort) Connect(f physic.Frequency, m spi.Mode, bits int) (spi.Conn, error) {
-	if f > 4*physic.MegaHertz {
-		return nil, fmt.Errorf("d2xx: invalid speed %s; maximum supported clock is 4MHz", f)
+	if f > physic.GigaHertz {
+		return nil, fmt.Errorf("d2xx: invalid speed %s; maximum supported clock is 3MHz", f)
+	}
+	if f > ft232rMaxSpeed {
+		// TODO(maruel): Figure out a way to communicate that the speed was lowered.
+		// https://github.com/google/periph/issues/255
+		f = ft232rMaxSpeed
 	}
 	if f < 100*physic.Hertz {
 		return nil, fmt.Errorf("d2xx: invalid speed %s; minimum supported clock is 100Hz; did you forget to multiply by physic.MegaHertz?", f)
@@ -233,36 +240,51 @@ func (s *spiSyncPort) Connect(f physic.Frequency, m spi.Mode, bits int) (spi.Con
 	if bits&7 != 0 {
 		return nil, errors.New("d2xx: bits must be multiple of 8")
 	}
-	s.c.ew = gpio.FallingEdge
-	s.c.er = gpio.RisingEdge
-	s.c.clk = gpio.Low
-	switch m {
-	case spi.Mode0:
-	case spi.Mode1:
-		s.c.ew = gpio.RisingEdge
-		s.c.er = gpio.FallingEdge
-	case spi.Mode2:
-		s.c.clk = gpio.High
-	case spi.Mode3:
-		s.c.ew = gpio.RisingEdge
-		s.c.er = gpio.FallingEdge
-		s.c.clk = gpio.High
-	default:
-		return nil, errors.New("d2xx: unknown mode")
-	}
 
 	s.c.f.mu.Lock()
 	defer s.c.f.mu.Unlock()
+	if m&spi.NoCS != 0 {
+		s.c.noCS = true
+		m &^= spi.NoCS
+	}
+	if m&spi.HalfDuplex != 0 {
+		s.c.halfDuplex = true
+		m &^= spi.HalfDuplex
+		return nil, errors.New("d2xx: spi.HalfDuplex is not yet supported (implementing wouldn't be too hard, please submit a PR")
+	}
+	if m&spi.LSBFirst != 0 {
+		s.c.lsbFirst = true
+		m &^= spi.LSBFirst
+		return nil, errors.New("d2xx: spi.LSBFirst is not yet supported (implementing wouldn't be too hard, please submit a PR")
+	}
+	if m < 0 || m > 3 {
+		return nil, errors.New("d2xx: unknown mode")
+	}
+	s.c.edgeInvert = m&1 != 0
+	s.c.clkActiveLow = m&2 != 0
 	if s.maxFreq == 0 || f < s.maxFreq {
-		if err := s.c.f.SetSpeed(s.maxFreq); err != nil {
+		if err := s.c.f.SetSpeed(f); err != nil {
 			return nil, err
 		}
 		s.maxFreq = f
 	}
-	// D1 and D3 are output. D4~D7 are kept as-is.
-	mask := byte(1)<<1 | byte(1)<<3 | (s.c.f.dmask & 0xF0)
-	if err := s.c.f.SetDBusMask(mask); err != nil {
+	// D0, D2 and D3 are output. D4~D7 are kept as-is.
+	mask := byte(1)<<0 | byte(1)<<2 | byte(1)<<3 | (s.c.f.dmask & 0xF0)
+	if err := s.c.f.setDBusMaskLocked(mask); err != nil {
 		return nil, err
+	}
+	// TODO(maruel): Combine both following calls if possible.
+	if !s.c.noCS {
+		// CTS/SPI_CS is active low.
+		if err := s.c.f.dbusSyncGPIOOutLocked(3, gpio.High); err != nil {
+			return nil, err
+		}
+	}
+	if s.c.clkActiveLow {
+		// RTS/SPI_CLK is active low.
+		if err := s.c.f.dbusSyncGPIOOutLocked(2, gpio.High); err != nil {
+			return nil, err
+		}
 	}
 	s.c.f.usingSPI = true
 	return &s.c, nil
@@ -270,8 +292,8 @@ func (s *spiSyncPort) Connect(f physic.Frequency, m spi.Mode, bits int) (spi.Con
 
 // LimitSpeed implements spi.Port.
 func (s *spiSyncPort) LimitSpeed(f physic.Frequency) error {
-	if f > 4*physic.MegaHertz {
-		return fmt.Errorf("d2xx: invalid speed %s; maximum supported clock is 4MHz", f)
+	if f > physic.GigaHertz {
+		return fmt.Errorf("d2xx: invalid speed %s; maximum supported clock is 3MHz", f)
 	}
 	if f < 100*physic.Hertz {
 		return fmt.Errorf("d2xx: invalid speed %s; minimum supported clock is 100Hz; did you forget to multiply by physic.MegaHertz?", f)
@@ -312,9 +334,11 @@ type spiSyncConn struct {
 	f *FT232R
 
 	// Initialized at Connect().
-	ew  gpio.Edge
-	er  gpio.Edge
-	clk gpio.Level
+	edgeInvert   bool // CPHA=1
+	clkActiveLow bool // CPOL=1
+	noCS         bool
+	lsbFirst     bool
+	halfDuplex   bool
 }
 
 func (s *spiSyncConn) String() string {
@@ -349,23 +373,93 @@ func (s *spiSyncConn) TxPackets(pkts []spi.Packet) error {
 			total += 4 * 8 * len(p.R)
 		}
 	}
+	if !s.noCS {
+		total += 10
+	}
 	// Create a large, single chunk.
+
 	we := make([]byte, 0, total)
-	re := make([]byte, 0, total)
-	m := s.f.dvalue & s.f.dmask & 0xF0
+	re := make([]byte, total)
+	const mosi = byte(0) // TX
+	const clk = byte(2)  // RTS
+	const cs = byte(3)   // CTS
+
+	s.f.mu.Lock()
+	defer s.f.mu.Unlock()
+
+	// https://en.wikipedia.org/wiki/Serial_Peripheral_Interface#Data_transmission
+
+	csActive := s.f.dvalue & s.f.dmask & 0xF0
+	csIdle := csActive
+	if !s.noCS {
+		csIdle = csActive | byte(1)<<3
+	}
+	// RTS/SPI_CLK
+	clkIdle := csActive | byte(0)
+	clkActive := clkIdle | byte(1)<<2
+	if s.clkActiveLow {
+		clkActive, clkIdle = clkIdle, clkActive
+		csIdle |= byte(1) << 2
+	}
+	// Start of tx; assert CS if needed.
+	if !s.noCS {
+		we = append(we, csIdle, clkIdle, clkIdle, clkIdle, clkIdle)
+	}
 	for _, p := range pkts {
 		if len(p.W) == 0 && len(p.R) == 0 {
 			continue
 		}
-		// TODO(maruel): Assert CS.
-		// TODO(maruel): Bits handling.
-		we = append(we, m)
+		// TODO(maruel): halfDuplex.
+		for _, b := range p.W {
+			// TODO(maruel): lsbFirst.
+			for j := uint(0); j < 8; j++ {
+				// For each bit, handle clock phase and data phase.
+				bit := byte(0)
+				// MSB
+				if b&0x80>>j != 0 {
+					bit = byte(1) << 0 // TX/SPI_MOSI
+				}
+				if !s.edgeInvert {
+					// Mode0/2; CPHA=0
+					we = append(we, clkIdle|bit, clkActive|bit, clkActive|bit, clkIdle)
+				} else {
+					// Mode1/3; CPHA=1
+					we = append(we, clkIdle, clkActive|bit, clkActive|bit, clkIdle|bit)
+				}
+			}
+		}
 		// TODO(maruel): Deassert CS.
 	}
-	if err := s.f.Tx(we, re); err != nil {
+	// End of tx; deassert CS.
+	if !s.noCS {
+		we = append(we, clkIdle, clkIdle, clkIdle, clkIdle, csIdle)
+	}
+
+	if err := s.f.txLocked(we, re); err != nil {
 		return err
 	}
-	// Extract data from re into r.
+	off := 1
+	if s.edgeInvert {
+		off = 3
+	}
+	for _, p := range pkts {
+		if len(p.W) == 0 && len(p.R) == 0 {
+			continue
+		}
+		// TODO(maruel): Extract data from re into r.
+		// TODO(maruel): halfDuplex.
+		// TODO(maruel): lsbFirst.
+		for i := range p.R {
+			// For each bit, read at the right data phase.
+			b := byte(0)
+			for j := 0; j < 8; j++ {
+				if re[5+i*8*4+j*4+off]&byte(1)<<1 != 0 {
+					b |= 0x80 >> uint(j)
+				}
+			}
+			p.R[i] = b
+		}
+	}
 	return nil
 }
 

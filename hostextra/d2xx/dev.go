@@ -159,7 +159,6 @@ func (f *generic) Header() []gpio.PinIO {
 }
 
 func (f *generic) SetSpeed(freq physic.Frequency) error {
-	// TODO(maruel): When using MPSEE, use the MPSEE command.
 	// TODO(maruel): Doc says the actual speed is 16x, confirm.
 	return f.h.setBaudRate(int64(freq / physic.Hertz))
 }
@@ -509,10 +508,10 @@ type FT232R struct {
 
 	// Pin and their alias to the Dn pins for user convenience. Each pair points
 	// to the exact same pin.
-	D0, TX  gpio.PinIO // Transmit
-	D1, RX  gpio.PinIO // Receive
-	D2, RTS gpio.PinIO // Request To Send Control Output / Handshake signal
-	D3, CTS gpio.PinIO // Clear to Send Control input / Handshake signal
+	D0, TX  gpio.PinIO // Transmit; SPI_MOSI
+	D1, RX  gpio.PinIO // Receive; SPI_MISO
+	D2, RTS gpio.PinIO // Request To Send Control Output / Handshake signal; SPI_CLK
+	D3, CTS gpio.PinIO // Clear to Send Control input / Handshake signal; SPI_CS
 	D4, DTR gpio.PinIO // Data Terminal Ready Control Output / Handshake signal
 	D5, DSR gpio.PinIO // Data Set Ready Control Input / Handshake signal
 	D6, DCD gpio.PinIO // Data Carrier Detect Control input
@@ -558,13 +557,7 @@ func (f *FT232R) SetDBusMask(mask uint8) error {
 	if f.usingSPI {
 		return errors.New("d2xx: already using SPI")
 	}
-	if mask != f.dmask {
-		if err := f.h.setBitMode(mask, bitModeSyncBitbang); err != nil {
-			return err
-		}
-		f.dmask = mask
-	}
-	return nil
+	return f.setDBusMaskLocked(mask)
 }
 
 // Tx does synchronized read-then-write on all the D0~D7 GPIOs.
@@ -582,33 +575,19 @@ func (f *FT232R) SetDBusMask(mask uint8) error {
 // On the Adafruit cable, only the first 4 bits D0(TX), D1(RX), D2(RTS) and
 // D3(CTS) are connected. This is just enough to create a full duplex SPI bus!
 func (f *FT232R) Tx(w, r []byte) error {
-	if len(w) != len(r) {
-		// TODO(maruel): Accept nil for one.
-		return errors.New("d2xx: length of buffer w and r must match")
+	if len(w) != 0 {
+		if len(r) != 0 && len(w) != len(r) {
+			return errors.New("d2xx: length of buffer w and r must match")
+		}
+	} else if len(r) == 0 {
+		return errors.New("d2xx: at least one of w or r must be passed")
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.usingSPI {
 		return errors.New("d2xx: already using SPI")
 	}
-	// Chunk into 64 bytes chunks. That's half the buffer size of the chip.
-	// TODO(maruel): Determine what's optimal.
-	const chunk = 64
-	for len(w) != 0 {
-		c := len(w)
-		if c > chunk {
-			c = chunk
-		}
-		if _, err := f.h.write(w[:c]); err != nil {
-			return err
-		}
-		if _, err := f.h.read(r[:c]); err != nil {
-			return err
-		}
-		w = w[c:]
-		r = w[c:]
-	}
-	return nil
+	return f.txLocked(w, r)
 }
 
 // SPI returns a SPI port over the first 4 pins.
@@ -626,6 +605,72 @@ func (f *FT232R) SPI() (spi.PortCloser, error) {
 	return &f.s, nil
 }
 
+// setDBusMaskLocked is the locked version of SetDBusMask.
+func (f *FT232R) setDBusMaskLocked(mask uint8) error {
+	if mask != f.dmask {
+		if err := f.h.setBitMode(mask, bitModeSyncBitbang); err != nil {
+			return err
+		}
+		f.dmask = mask
+	}
+	return nil
+}
+
+func (f *FT232R) txLocked(w, r []byte) error {
+	// Chunk into 64 bytes chunks. That's half the buffer size of the chip.
+	// TODO(maruel): Determine what's optimal.
+	const chunk = 64
+	var scratch [chunk]byte
+	if len(w) == 0 {
+		// Read only.
+		for len(r) != 0 {
+			c := len(r)
+			if c > chunk {
+				c = chunk
+			}
+			if _, err := f.h.write(scratch[:c]); err != nil {
+				return err
+			}
+			if _, err := f.h.read(r[:c]); err != nil {
+				return err
+			}
+			r = r[c:]
+		}
+	} else if len(r) == 0 {
+		// Write only.
+		for len(w) != 0 {
+			c := len(w)
+			if c > chunk {
+				c = chunk
+			}
+			if _, err := f.h.write(w[:c]); err != nil {
+				return err
+			}
+			if _, err := f.h.read(scratch[:c]); err != nil {
+				return err
+			}
+			w = w[c:]
+		}
+	} else {
+		// R/W.
+		for len(w) != 0 {
+			c := len(w)
+			if c > chunk {
+				c = chunk
+			}
+			if _, err := f.h.write(w[:c]); err != nil {
+				return err
+			}
+			if _, err := f.h.read(r[:c]); err != nil {
+				return err
+			}
+			w = w[c:]
+			r = r[c:]
+		}
+	}
+	return nil
+}
+
 // dbusSyncGPIOFunc implements dbusSync. It returns the function of a GPIO
 // pin.
 func (f *FT232R) dbusSyncGPIOFunc(n int) string {
@@ -634,13 +679,13 @@ func (f *FT232R) dbusSyncGPIOFunc(n int) string {
 	if f.usingSPI {
 		switch n {
 		case 0:
-			return "SPI_MOSI"
+			return "SPI_MOSI" // TX
 		case 1:
-			return "SPI_MISO"
+			return "SPI_MISO" // RX
 		case 2:
-			return "SPI_CLK"
+			return "SPI_CLK" // RTS
 		case 3:
-			return "SPI_CS"
+			return "SPI_CS" // CTS
 		}
 	}
 	mask := uint8(1 << uint(n))
@@ -702,6 +747,10 @@ func (f *FT232R) dbusSyncGPIOOut(n int, l gpio.Level) error {
 		}
 		f.dmask = v
 	}
+	return f.dbusSyncGPIOOutLocked(n, l)
+}
+
+func (f *FT232R) dbusSyncGPIOOutLocked(n int, l gpio.Level) error {
 	b := [1]byte{f.dvalue}
 	if _, err := f.h.write(b[:]); err != nil {
 		return err
