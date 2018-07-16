@@ -35,8 +35,11 @@ func (s *spiMPSEEPort) Close() error {
 	s.c.f.mu.Lock()
 	s.c.f.usingSPI = false
 	s.maxFreq = 0
-	s.c.ew = gpio.FallingEdge
-	s.c.er = gpio.RisingEdge
+	s.c.edgeInvert = false
+	s.c.clkActiveLow = false
+	s.c.noCS = false
+	s.c.lsbFirst = false
+	s.c.halfDuplex = false
 	s.c.f.mu.Unlock()
 	return nil
 }
@@ -47,8 +50,13 @@ func (s *spiMPSEEPort) String() string {
 
 // Connect implements spi.Port.
 func (s *spiMPSEEPort) Connect(f physic.Frequency, m spi.Mode, bits int) (spi.Conn, error) {
-	if f > 30*physic.MegaHertz {
+	if f > physic.GigaHertz {
 		return nil, fmt.Errorf("d2xx: invalid speed %s; maximum supported clock is 30MHz", f)
+	}
+	if f > 30*physic.MegaHertz {
+		// TODO(maruel): Figure out a way to communicate that the speed was lowered.
+		// https://github.com/google/periph/issues/255
+		f = 30 * physic.MegaHertz
 	}
 	if f < 100*physic.Hertz {
 		return nil, fmt.Errorf("d2xx: invalid speed %s; minimum supported clock is 100Hz; did you forget to multiply by physic.MegaHertz?", f)
@@ -56,41 +64,44 @@ func (s *spiMPSEEPort) Connect(f physic.Frequency, m spi.Mode, bits int) (spi.Co
 	if bits&7 != 0 {
 		return nil, errors.New("d2xx: bits must be multiple of 8")
 	}
-	s.c.ew = gpio.FallingEdge
-	s.c.er = gpio.RisingEdge
-	clk := gpio.Low
-	switch m {
-	case spi.Mode0:
-	case spi.Mode1:
-		s.c.ew = gpio.RisingEdge
-		s.c.er = gpio.FallingEdge
-	case spi.Mode2:
-		clk = gpio.High
-	case spi.Mode3:
-		s.c.ew = gpio.RisingEdge
-		s.c.er = gpio.FallingEdge
-		clk = gpio.High
-	default:
-		return nil, errors.New("d2xx: unknown mode")
+	if bits != 8 {
+		return nil, errors.New("d2xx: implement bits per word above 8")
 	}
 
 	s.c.f.mu.Lock()
 	defer s.c.f.mu.Unlock()
+	s.c.noCS = m&spi.NoCS != 0
+	s.c.halfDuplex = m&spi.HalfDuplex != 0
+	s.c.lsbFirst = m&spi.LSBFirst != 0
+	m &^= spi.NoCS | spi.HalfDuplex | spi.LSBFirst
+	if s.c.halfDuplex {
+		return nil, errors.New("d2xx: spi.HalfDuplex is not yet supported (implementing wouldn't be too hard, please submit a PR")
+	}
+	if m < 0 || m > 3 {
+		return nil, errors.New("d2xx: unknown spi mode")
+	}
+	s.c.edgeInvert = m&1 != 0
+	s.c.clkActiveLow = m&2 != 0
 	if s.maxFreq == 0 || f < s.maxFreq {
 		if _, err := s.c.f.h.mpsseClock(s.maxFreq); err != nil {
 			return nil, err
 		}
 		s.maxFreq = f
 	}
-	// Note: D4~D7 are unusable.
-	// TODO(maruel): Keep them as-is when transmitting.
-	// D1 and D3 are output.
-	mask := byte(1)<<1 | byte(1)<<3
+	// Note: D4~D7 are unusable. TODO(maruel): Keep them as-is when transmitting.
+	const clk = byte(1) << 0
+	const mosi = byte(1) << 1
+	const miso = byte(1) << 2
+	const cs = byte(1) << 3
 	b := byte(0)
-	if clk {
-		b = 1
+	if !s.c.noCS {
+		b |= cs
 	}
-	if err := s.c.f.h.mpsseDBus(mask, b); err != nil {
+	if s.c.clkActiveLow {
+		b |= clk
+	}
+	// D0, D1 and D3 are output.
+	if err := s.c.f.h.mpsseDBus(mosi|clk|cs, b); err != nil {
 		return nil, err
 	}
 	s.c.f.usingSPI = true
@@ -99,8 +110,11 @@ func (s *spiMPSEEPort) Connect(f physic.Frequency, m spi.Mode, bits int) (spi.Co
 
 // LimitSpeed implements spi.Port.
 func (s *spiMPSEEPort) LimitSpeed(f physic.Frequency) error {
+	if f > physic.GigaHertz {
+		return fmt.Errorf("d2xx: invalid speed %s; maximum supported clock is 30MHz", f)
+	}
 	if f > 30*physic.MegaHertz {
-		return errors.New("d2xx: maximum supported clock is 30MHz")
+		f = 30 * physic.MegaHertz
 	}
 	if f < 100*physic.Hertz {
 		return errors.New("d2xx: minimum supported clock is 100Hz; did you forget to multiply by physic.MegaHertz?")
@@ -140,8 +154,11 @@ type spiMPSEEConn struct {
 	f *FT232H
 
 	// Initialized at Connect().
-	ew gpio.Edge
-	er gpio.Edge
+	edgeInvert   bool // CPHA=1
+	clkActiveLow bool // CPOL=1
+	noCS         bool // CS line is not changed
+	lsbFirst     bool // Default is MSB first
+	halfDuplex   bool // 3 wire mode
 }
 
 func (s *spiMPSEEConn) String() string {
@@ -163,23 +180,65 @@ func (s *spiMPSEEConn) TxPackets(pkts []spi.Packet) error {
 	// too.
 	// TODO(maruel): One lock for CBus and one for DBus?
 	for _, p := range pkts {
+		if p.KeepCS {
+			return errors.New("d2xx: implement spi.Packet.KeepCS")
+		}
 		if p.BitsPerWord&7 != 0 {
 			return errors.New("d2xx: bits must be a multiple of 8")
+		}
+		if p.BitsPerWord != 0 && p.BitsPerWord != 8 {
+			return errors.New("d2xx: implement spi.Packet.BitsPerWord")
 		}
 		if err := verifyBuffers(p.W, p.R); err != nil {
 			return err
 		}
 	}
+	const clk = byte(1) << 0
+	const mosi = byte(1) << 1
+	const miso = byte(1) << 2
+	const cs = byte(1) << 3
+	// D0, D1 and D3 are output.
+	const mask = mosi | clk | cs
 	for _, p := range pkts {
 		if len(p.W) == 0 && len(p.R) == 0 {
 			continue
 		}
-		// TODO(maruel): Assert CS.
-		// TODO(maruel): Bits handling.
-		if err := s.f.h.mpsseTx(p.W, p.R, s.ew, s.er, false); err != nil {
+		// TODO(maruel): s.halfDuplex.
+		// TODO(maruel): Package as one big transaction?
+
+		// Assert CS.
+		b := byte(0)
+		if s.clkActiveLow {
+			b |= clk
+		}
+		if err := s.f.h.mpsseDBus(mask, b); err != nil {
 			return err
 		}
-		// TODO(maruel): Deassert CS.
+
+		ew := gpio.FallingEdge
+		er := gpio.RisingEdge
+		if s.edgeInvert {
+			ew, er = er, ew
+		}
+		if s.clkActiveLow {
+			// TODO(maruel): Not sure.
+			ew, er = er, ew
+		}
+		if err := s.f.h.mpsseTx(p.W, p.R, ew, er, s.lsbFirst); err != nil {
+			return err
+		}
+
+		// Deassert CS.
+		b = byte(0)
+		if !s.noCS {
+			b |= cs
+		}
+		if s.clkActiveLow {
+			b |= clk
+		}
+		if err := s.f.h.mpsseDBus(mask, b); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -249,6 +308,9 @@ func (s *spiSyncPort) Connect(f physic.Frequency, m spi.Mode, bits int) (spi.Con
 	if bits&7 != 0 {
 		return nil, errors.New("d2xx: bits must be multiple of 8")
 	}
+	if bits != 8 {
+		return nil, errors.New("d2xx: implement bits per word above 8")
+	}
 
 	s.c.f.mu.Lock()
 	defer s.c.f.mu.Unlock()
@@ -260,7 +322,7 @@ func (s *spiSyncPort) Connect(f physic.Frequency, m spi.Mode, bits int) (spi.Con
 		return nil, errors.New("d2xx: spi.HalfDuplex is not yet supported (implementing wouldn't be too hard, please submit a PR")
 	}
 	if m < 0 || m > 3 {
-		return nil, errors.New("d2xx: unknown mode")
+		return nil, errors.New("d2xx: unknown spi mode")
 	}
 	s.c.edgeInvert = m&1 != 0
 	s.c.clkActiveLow = m&2 != 0
@@ -271,7 +333,11 @@ func (s *spiSyncPort) Connect(f physic.Frequency, m spi.Mode, bits int) (spi.Con
 		s.maxFreq = f
 	}
 	// D0, D2 and D3 are output. D4~D7 are kept as-is.
-	mask := byte(1)<<0 | byte(1)<<2 | byte(1)<<3 | (s.c.f.dmask & 0xF0)
+	const mosi = byte(1) << 0 // TX
+	const miso = byte(1) << 1 // RX
+	const clk = byte(1) << 2  // RTS
+	const cs = byte(1) << 3   // CTS
+	mask := mosi | clk | cs | (s.c.f.dmask & 0xF0)
 	if err := s.c.f.setDBusMaskLocked(mask); err != nil {
 		return nil, err
 	}
@@ -364,8 +430,14 @@ func (s *spiSyncConn) TxPackets(pkts []spi.Packet) error {
 	totalW := 0
 	totalR := 0
 	for _, p := range pkts {
+		if p.KeepCS {
+			return errors.New("d2xx: implement spi.Packet.KeepCS")
+		}
 		if p.BitsPerWord&7 != 0 {
 			return errors.New("d2xx: bits must be a multiple of 8")
+		}
+		if p.BitsPerWord != 0 && p.BitsPerWord != 8 {
+			return errors.New("d2xx: implement spi.Packet.BitsPerWord")
 		}
 		if err := verifyBuffers(p.W, p.R); err != nil {
 			return err
@@ -416,7 +488,7 @@ func (s *spiSyncConn) TxPackets(pkts []spi.Packet) error {
 		if len(p.W) == 0 && len(p.R) == 0 {
 			continue
 		}
-		// TODO(maruel): halfDuplex.
+		// TODO(maruel): s.halfDuplex.
 		for _, b := range p.W {
 			for j := uint(0); j < 8; j++ {
 				// For each bit, handle clock phase and data phase.

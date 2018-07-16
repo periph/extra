@@ -267,6 +267,7 @@ func (d *device) mpsseTx(w, r []byte, ew, er gpio.Edge, lsbf bool) error {
 	}
 	l := len(w)
 	if len(w) != 0 {
+		// TODO(maruel): This is easy to fix by daisy chaining operations.
 		if len(w) > 65536 {
 			return errors.New("d2xx: write buffer too long; max 65536")
 		}
