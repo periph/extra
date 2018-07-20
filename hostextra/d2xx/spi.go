@@ -83,7 +83,7 @@ func (s *spiMPSEEPort) Connect(f physic.Frequency, m spi.Mode, bits int) (spi.Co
 	s.c.edgeInvert = m&1 != 0
 	s.c.clkActiveLow = m&2 != 0
 	if s.maxFreq == 0 || f < s.maxFreq {
-		if _, err := s.c.f.h.mpsseClock(s.maxFreq); err != nil {
+		if _, err := s.c.f.h.mpsseClock(f); err != nil {
 			return nil, err
 		}
 		s.maxFreq = f

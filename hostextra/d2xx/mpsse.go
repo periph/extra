@@ -165,8 +165,22 @@ func (d *device) setupMPSSE() error {
 	// the 'happy path', which enables reusing the device is its current state
 	// without affecting current GPIO state.
 	if d.mpsseVerify() != nil {
-		// Enable the MPSSE controller.
-		if err := d.setBitMode(0, 2); err != nil {
+		// Do a full reset. Just trying to set the MPSSE controller will
+		// likely not work. That's a layering violation (since the retry with reset
+		// is done in driver.go) but we've survived worse things...
+		//
+		// TODO(maruel): This is not helping in practice, this need to be fine
+		// tuned.
+		if err := d.reset(); err != nil {
+			return err
+		}
+		if err := d.setupCommon(); err != nil {
+			return err
+		}
+		if err := d.setBitMode(0, bitModeReset); err != nil {
+			return err
+		}
+		if err := d.setBitMode(0, bitModeMpsse); err != nil {
 			return err
 		}
 		if err := d.mpsseVerify(); err != nil {
@@ -180,8 +194,8 @@ func (d *device) setupMPSSE() error {
 	// state of each GPIO (if they are input or output).
 	cmd := []byte{
 		clock30MHz, clockNormal, clock2Phase, internalLoopbackDisable,
-		gpioSetC, 0xFF, 0x00,
-		gpioSetD, 0xFF, 0x00,
+		gpioSetC, 0x00, 0x00,
+		gpioSetD, 0x00, 0x00,
 	}
 	if _, err := d.write(cmd); err != nil {
 		return err
@@ -350,7 +364,7 @@ func (d *device) mpsseTxShort(w byte, wbits, rbits int, ew, er gpio.Edge, lsbf b
 }
 
 func (d *device) mpsseCBus(mask, value byte) error {
-	b := [...]byte{gpioSetC, mask, value}
+	b := [...]byte{gpioSetC, value, mask}
 	_, err := d.write(b[:])
 	return err
 }
@@ -359,7 +373,7 @@ func (d *device) mpsseCBus(mask, value byte) error {
 //
 // Direction 1 means output, 0 means input.
 func (d *device) mpsseDBus(mask, value byte) error {
-	b := [...]byte{gpioSetD, mask, value}
+	b := [...]byte{gpioSetD, value, mask}
 	_, err := d.write(b[:])
 	return err
 }
