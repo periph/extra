@@ -53,12 +53,9 @@ func (d *i2cBus) SetSpeed(f physic.Frequency) error {
 	if f < 100*physic.Hertz {
 		return fmt.Errorf("d2xx: invalid speed %s; minimum supported clock is 100Hz; did you forget to multiply by physic.KiloHertz?", f)
 	}
-	// TODO(maruel): Use proper mpsse command.
-	clk := ((30 * physic.MegaHertz / f) - 1) * 2 / 3
-	cmd := [...]byte{
-		clock30MHz, byte(clk), byte(clk >> 8),
-	}
-	if _, err := d.f.h.write(cmd[:]); err != nil {
+	d.f.mu.Lock()
+	defer d.f.mu.Unlock()
+	if _, err := d.f.h.mpsseClock(f * 2 / 3); err != nil {
 		return err
 	}
 	return d.setI2CLinesIdle()
@@ -68,6 +65,7 @@ func (d *i2cBus) SetSpeed(f physic.Frequency) error {
 func (d *i2cBus) Tx(addr uint16, w, r []byte) error {
 	d.f.mu.Lock()
 	defer d.f.mu.Unlock()
+	// TODO(maruel): Merge these commands.
 	if err := d.setI2CStart(); err != nil {
 		return err
 	}
@@ -85,6 +83,7 @@ func (d *i2cBus) Tx(addr uint16, w, r []byte) error {
 			return err
 		}
 	}
+	// TODO(maruel): Merge these commands.
 	if err := d.setI2CStop(); err != nil {
 		return err
 	}
@@ -102,22 +101,26 @@ func (d *i2cBus) SDA() gpio.PinIO {
 }
 
 func (d *i2cBus) setupI2C() error {
-	// Initialize MPSSE to a known state.
-	f := 100 * physic.KiloHertz
+	// Initialize MPSSE to a known state. Defaults to 400kHz, because 100kHz is
+	// really slow.
+	// TODO(maruel): We could set these only *during* the I²C operation, which
+	// would make more sense.
+	f := 400 * physic.KiloHertz
 	clk := ((30 * physic.MegaHertz / f) - 1) * 2 / 3
 	cmd := [...]byte{
 		clock3Phase,
 		dataTristate, 0x07, 0x00,
 		clock30MHz, byte(clk), byte(clk >> 8),
 	}
-	d.f.usingI2C = true
 	if _, err := d.f.h.write(cmd[:]); err != nil {
 		return err
 	}
+	d.f.usingI2C = true
 	return d.setI2CLinesIdle()
 }
 
 func (d *i2cBus) stopI2C() error {
+	// Resets to 30MHz.
 	cmd := [...]byte{
 		clock2Phase,
 		dataTristate, 0x00, 0x00,

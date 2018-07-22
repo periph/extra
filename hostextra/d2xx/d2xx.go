@@ -91,6 +91,8 @@ func (d *device) setupCommon() error {
 	// Driver: maximum packet size. Note that this clears any data in the buffer,
 	// so it is good to do it immediately after a reset. The 'out' parameter is
 	// ignored.
+	// TODO(maruel): The FT232H doc claims a 512 byte packets support in hi-speed
+	// mode, which means that this would likely be better to use this value.
 	if e := d.h.d2xxSetUSBParameters(65536, 0); e != 0 {
 		return toErr("SetUSBParameters", e)
 	}

@@ -262,6 +262,9 @@ func newFT232H(g generic) (*FT232H, error) {
 //
 // It implements Dev.
 //
+// The FT232H has 1024 bytes output buffer and 1024 bytes input buffer. It
+// supports 512 bytes USB packets.
+//
 // The device can be used in a few different modes, two modes are supported:
 //
 // - D0~D3 as a serial protocol (MPSEE), supporting I²C and SPI (and eventually
