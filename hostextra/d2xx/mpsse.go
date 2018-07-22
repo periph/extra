@@ -211,13 +211,17 @@ func (d *device) setupMPSSE() error {
 func (d *device) mpsseVerify() error {
 	for _, v := range []byte{0xAA, 0xAB} {
 		// Write a bad command and ensure it returned correctly.
-		if _, err := d.write([]byte{v}); err != nil {
+		// Unlike what the application note proposes, include a flush op right
+		// after. Without the flush, the device will only flush after the delay
+		// specified to SetLatencyTimer. The flush removes this unneeded wait,
+		// which enables increasing the delay specified to SetLatencyTimer.
+		if _, err := d.write([]byte{v, flush}); err != nil {
 			return fmt.Errorf("d2xx: mpsseVerify: %v", err)
 		}
-		// Try for 200ms.
+		// Try for 50ms.
 		var b [2]byte
 		success := false
-		for start := time.Now(); time.Since(start) < 200*time.Millisecond; {
+		for start := time.Now(); time.Since(start) < 50*time.Millisecond; {
 			if n, err := d.read(b[:]); err != nil {
 				return fmt.Errorf("d2xx: mpsseVerify: %v", err)
 			} else if n == 0 {
@@ -255,6 +259,7 @@ func (d *device) mpsseRegRead(addr uint16) (byte, error) {
 
 // mpsseClock sets the clock at the closest value and returns it.
 func (d *device) mpsseClock(f physic.Frequency) (physic.Frequency, error) {
+	// TODO(maruel): Memory clock and skip if the same value.
 	clk := clock30MHz
 	base := 30 * physic.MegaHertz
 	div := base / f
@@ -271,32 +276,41 @@ func (d *device) mpsseClock(f physic.Frequency) (physic.Frequency, error) {
 	return base / div, err
 }
 
-// mpsseTx runs a transaction on the clock on pins D0, D1 and D2.
-//
-// It can only do it on a multiple of 8 bits.
-func (d *device) mpsseTx(w, r []byte, ew, er gpio.Edge, lsbf bool) error {
+// mpsseTxOp returns the right MPSSE command byte for the stream.
+func mpsseTxOp(w, r bool, ew, er gpio.Edge, lsbf bool) byte {
 	op := byte(0)
 	if lsbf {
 		op |= dataLSBF
 	}
+	if w {
+		op |= dataOut
+		if ew == gpio.FallingEdge {
+			op |= dataOutFall
+		}
+	}
+	if r {
+		op |= dataIn
+		if er == gpio.FallingEdge {
+			op |= dataInFall
+		}
+	}
+	return op
+}
+
+// mpsseTx runs a transaction on the clock on pins D0, D1 and D2.
+//
+// It can only do it on a multiple of 8 bits.
+func (d *device) mpsseTx(w, r []byte, ew, er gpio.Edge, lsbf bool) error {
 	l := len(w)
 	if len(w) != 0 {
 		// TODO(maruel): This is easy to fix by daisy chaining operations.
 		if len(w) > 65536 {
 			return errors.New("d2xx: write buffer too long; max 65536")
 		}
-		op |= dataOut
-		if ew == gpio.FallingEdge {
-			op |= dataOutFall
-		}
 	}
 	if len(r) != 0 {
 		if len(r) > 65536 {
 			return errors.New("d2xx: read buffer too long; max 65536")
-		}
-		op |= dataIn
-		if er == gpio.FallingEdge {
-			op |= dataInFall
 		}
 		if l != 0 && len(r) != l {
 			return errors.New("d2xx: mismatched buffer lengths")
@@ -307,6 +321,7 @@ func (d *device) mpsseTx(w, r []byte, ew, er gpio.Edge, lsbf bool) error {
 	// TODO(maruel): Test.
 
 	// flushBuffer can be useful if rbits != 0.
+	op := mpsseTxOp(len(w) != 0, len(r) != 0, ew, er, lsbf)
 	cmd := []byte{op, byte(l - 1), byte((l - 1) >> 8)}
 	if _, err := d.write(append(cmd, w...)); err != nil {
 		return err
