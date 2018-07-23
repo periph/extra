@@ -83,25 +83,15 @@ func (s *spiMPSEEPort) Connect(f physic.Frequency, m spi.Mode, bits int) (spi.Co
 	s.c.edgeInvert = m&1 != 0
 	s.c.clkActiveLow = m&2 != 0
 	if s.maxFreq == 0 || f < s.maxFreq {
+		// TODO(maruel): We could set these only *during* the SPI operation, which
+		// would make more sense.
 		if _, err := s.c.f.h.mpsseClock(f); err != nil {
 			return nil, err
 		}
 		s.maxFreq = f
 	}
-	// Note: D4~D7 are unusable. TODO(maruel): Keep them as-is when transmitting.
-	const clk = byte(1) << 0
-	const mosi = byte(1) << 1
-	const miso = byte(1) << 2
-	const cs = byte(1) << 3
-	b := byte(0)
-	if !s.c.noCS {
-		b |= cs
-	}
-	if s.c.clkActiveLow {
-		b |= clk
-	}
-	// D0, D1 and D3 are output.
-	if err := s.c.f.h.mpsseDBus(mosi|clk|cs, b); err != nil {
+	s.c.resetIdle()
+	if err := s.c.f.h.mpsseDBus(s.c.f.dbus.direction, s.c.f.dbus.value); err != nil {
 		return nil, err
 	}
 	s.c.f.usingSPI = true
@@ -125,6 +115,8 @@ func (s *spiMPSEEPort) LimitSpeed(f physic.Frequency) error {
 		return nil
 	}
 	s.maxFreq = f
+	// TODO(maruel): We could set these only *during* the SPI operation, which
+	// would make more sense.
 	_, err := s.c.f.h.mpsseClock(s.maxFreq)
 	return err
 }
@@ -176,9 +168,7 @@ func (s *spiMPSEEConn) Duplex() conn.Duplex {
 }
 
 func (s *spiMPSEEConn) TxPackets(pkts []spi.Packet) error {
-	// Do not keep the lock during this function. This permits calling on the CBus
-	// too.
-	// TODO(maruel): One lock for CBus and one for DBus?
+	// Verification.
 	for _, p := range pkts {
 		if p.KeepCS {
 			return errors.New("d2xx: implement spi.Packet.KeepCS")
@@ -193,51 +183,140 @@ func (s *spiMPSEEConn) TxPackets(pkts []spi.Packet) error {
 			return err
 		}
 	}
+	s.f.mu.Lock()
+	defer s.f.mu.Unlock()
 	const clk = byte(1) << 0
 	const mosi = byte(1) << 1
 	const miso = byte(1) << 2
 	const cs = byte(1) << 3
-	// D0, D1 and D3 are output.
-	const mask = mosi | clk | cs
+	s.resetIdle()
+	idle := s.f.dbus.value
+	start1 := idle
+	if !s.noCS {
+		start1 &^= cs
+	}
+	// In mode 0 and 2, start2 is not needed.
+	start2 := start1
+	stop := idle
+	if s.edgeInvert {
+		// This is needed to 'prime' the clock.
+		start2 ^= clk
+		// With mode 1 and 3, keep the clock steady while CS is being deasserted to
+		// not create a spurious clock.
+		stop ^= clk
+	}
+	ew := gpio.FallingEdge
+	er := gpio.RisingEdge
+	if s.edgeInvert {
+		ew, er = er, ew
+	}
+	if s.clkActiveLow {
+		// TODO(maruel): Not sure.
+		ew, er = er, ew
+	}
+
+	// FT232H claims 512 USB packet support, so to reduce the chatter over USB,
+	// try to make all I/O be aligned on this amount. This also removes the need
+	// for heap usage. The idea is to always trail reads by one buffer. This is
+	// fine as the device has 1024 byte read buffer. Operations look like this:
+	//   W, W, R, W, R, W, R, R
+	// This enables reducing the I/O gaps between USB packets as the device is
+	// always busy with operations.
+	var buf [512]byte
+	cmd := buf[:0]
+	keptCS := false
+
+	// Loop, without increasing the index.
 	for _, p := range pkts {
 		if len(p.W) == 0 && len(p.R) == 0 {
 			continue
 		}
 		// TODO(maruel): s.halfDuplex.
-		// TODO(maruel): Package as one big transaction?
 
-		// Assert CS.
-		b := byte(0)
-		if s.clkActiveLow {
-			b |= clk
+		if !keptCS {
+			for i := 0; i < 5; i++ {
+				cmd = append(cmd, gpioSetD, idle, s.f.dbus.direction)
+			}
+			for i := 0; i < 5; i++ {
+				cmd = append(cmd, gpioSetD, start1, s.f.dbus.direction)
+			}
 		}
-		if err := s.f.h.mpsseDBus(mask, b); err != nil {
-			return err
-		}
-
-		ew := gpio.FallingEdge
-		er := gpio.RisingEdge
 		if s.edgeInvert {
-			ew, er = er, ew
+			// This is needed to 'prime' the clock.
+			for i := 0; i < 5; i++ {
+				cmd = append(cmd, gpioSetD, start2, s.f.dbus.direction)
+			}
 		}
-		if s.clkActiveLow {
-			// TODO(maruel): Not sure.
-			ew, er = er, ew
-		}
-		if err := s.f.h.mpsseTx(p.W, p.R, ew, er, s.lsbFirst); err != nil {
-			return err
-		}
+		op := mpsseTxOp(len(p.W) != 0, len(p.R) != 0, ew, er, s.lsbFirst)
 
-		// Deassert CS.
-		b = byte(0)
-		if !s.noCS {
-			b |= cs
+		// Do an I/O loop. We can mutate p here because it is a copy.
+		// TODO(maruel): Have the pipeline cross the packet boundary.
+		if len(p.W) == 0 {
+			// Have the write buffer point to the read one. This saves from
+			// allocating memory. The side effect is that it will write whatever
+			// happened to be in the read buffer.
+			p.W = p.R[:]
 		}
-		if s.clkActiveLow {
-			b |= clk
+		pendingRead := 0
+		for len(p.W) != 0 {
+			// op, sizelo, sizehi.
+			chunk := len(buf) - 3 - len(cmd)
+			if l := len(p.W); chunk > l {
+				chunk = l
+			}
+			if chunk == 0 {
+				panic("remove me")
+			}
+			cmd = append(cmd, op, byte(chunk-1), byte((chunk-1)>>8))
+			cmd = append(cmd, p.W[:chunk]...)
+			p.W = p.W[chunk:]
+			if _, err := s.f.h.write(cmd); err != nil {
+				return err
+			}
+			cmd = buf[:0]
+
+			// TODO(maruel): Read 62 bytes at a time?
+			// Delay reading by 512 bytes.
+			if pendingRead >= 512 {
+				if len(p.R) != 0 {
+					// Align reads on 512 bytes exactly, aligned on USB packet size.
+					if err := s.f.h.readAll(p.R[:512]); err != nil {
+						return err
+					}
+					p.R = p.R[512:]
+					pendingRead -= 512
+				}
+			}
+			pendingRead += chunk
 		}
-		if err := s.f.h.mpsseDBus(mask, b); err != nil {
-			return err
+		// Do not forget to read whatever is pending.
+		// TODO(maruel): Investigate if a flush helps.
+		if len(p.R) != 0 {
+			// Send a flush to not wait for data.
+			cmd = append(cmd, flush)
+			if _, err := s.f.h.write(cmd); err != nil {
+				return err
+			}
+			cmd = buf[:0]
+			if err := s.f.h.readAll(p.R); err != nil {
+				return err
+			}
+		}
+		// TODO(maruel): Inject this in the write if it fits (it will generally
+		// do). That will save one USB I/O, which is not insignificant.
+		keptCS = p.KeepCS
+		if !keptCS {
+			cmd = append(cmd, flush)
+			for i := 0; i < 5; i++ {
+				cmd = append(cmd, gpioSetD, stop, s.f.dbus.direction)
+			}
+			for i := 0; i < 5; i++ {
+				cmd = append(cmd, gpioSetD, idle, s.f.dbus.direction)
+			}
+			if _, err := s.f.h.write(cmd); err != nil {
+				return err
+			}
+			cmd = buf[:0]
 		}
 	}
 	return nil
@@ -261,6 +340,29 @@ func (s *spiMPSEEConn) MISO() gpio.PinIn {
 // CS returns the CSN (chip select) pin.
 func (s *spiMPSEEConn) CS() gpio.PinOut {
 	return s.f.D3
+}
+
+// resetIdle sets D0~D3. D0, D1 and D3 are output but only touch D3 is CS is
+// used.
+func (s *spiMPSEEConn) resetIdle() {
+	const clk = byte(1) << 0
+	const mosi = byte(1) << 1
+	const miso = byte(1) << 2
+	const cs = byte(1) << 3
+	if !s.noCS {
+		s.f.dbus.direction &= 0xF0
+		s.f.dbus.direction |= cs
+		s.f.dbus.value &= 0xF0
+		s.f.dbus.value |= cs
+	} else {
+		s.f.dbus.value &= 0xF8
+		s.f.dbus.direction &= 0xF8
+	}
+	s.f.dbus.direction |= mosi | clk
+	if s.clkActiveLow {
+		// Clock idles high.
+		s.f.dbus.value |= clk
+	}
 }
 
 //
