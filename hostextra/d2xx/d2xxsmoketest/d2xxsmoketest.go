@@ -65,7 +65,7 @@ func (s *SmokeTest) Run(f *flag.FlagSet, args []string) (err error) {
 
 func testFT232H(d *d2xx.FT232H) error {
 	// TODO(maruel): Read EEPROM, UA.
-	if err := gpioTest(&loggingPin{d.D2}, &loggingPin{d.D1}); err != nil {
+	if err := gpioTest(&loggingPin{d.D2}, &loggingPin{d.D1}, false); err != nil {
 		return err
 	}
 	if err := gpioPerfTest(d.C7); err != nil {
@@ -79,7 +79,8 @@ func testFT232H(d *d2xx.FT232H) error {
 
 func testFT232R(d *d2xx.FT232R) error {
 	// TODO(maruel): Read EEPROM, UA.
-	if err := gpioTest(&loggingPin{d.RX}, &loggingPin{d.TX}); err != nil {
+	// TODO(maruel): Remove broken once FT232R driver is stable for GPIO I/O.
+	if err := gpioTest(&loggingPin{d.RX}, &loggingPin{d.TX}, true); err != nil {
 		return err
 	}
 	return gpioPerfTest(d.CTS)
@@ -120,7 +121,7 @@ func gpioPerfTest(p gpio.PinIO) error {
 }
 
 // gpioTest ensures connectivity works.
-func gpioTest(p1, p2 gpio.PinIO) error {
+func gpioTest(p1, p2 gpio.PinIO, broken bool) error {
 	fmt.Printf("  GPIO functionality on %s and %s:\n", p1, p2)
 	if err := p1.In(gpio.PullNoChange, gpio.NoEdge); err != nil {
 		return err
@@ -129,15 +130,21 @@ func gpioTest(p1, p2 gpio.PinIO) error {
 		return err
 	}
 	if l := p1.Read(); l != gpio.Low {
-		fmt.Printf("TODO(maruel): Not working; %s: expected to read %s but got %s\n", p1, gpio.Low, l)
-		//return fmt.Errorf("%s: expected to read %s but got %s", p1, gpio.Low, l)
+		if broken {
+			fmt.Printf("TODO(maruel): Not working; %s: expected to read %s but got %s\n", p1, gpio.Low, l)
+		} else {
+			return fmt.Errorf("%s: expected to read %s but got %s", p1, gpio.Low, l)
+		}
 	}
 	if err := p2.Out(gpio.High); err != nil {
 		return err
 	}
 	if l := p1.Read(); l != gpio.High {
-		fmt.Printf("TODO(maruel): Not working; %s: expected to read %s but got %s\n", p1, gpio.High, l)
-		//return fmt.Errorf("%s: expected to read %s but got %s", p1, gpio.High, l)
+		if broken {
+			fmt.Printf("TODO(maruel): Not working; %s: expected to read %s but got %s\n", p1, gpio.High, l)
+		} else {
+			return fmt.Errorf("%s: expected to read %s but got %s", p1, gpio.High, l)
+		}
 	}
 	return nil
 }
