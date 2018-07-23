@@ -44,8 +44,8 @@ const (
 	dataLSBF    byte = 0x08 // instead of MSBF
 	dataBit     byte = 0x02 // instead of Byte
 
-	// Data line drives low when the data is 0 and tristates high on data 1. This
-	// is used with I²C.
+	// Data line drives low when the data is 0 and tristates on data 1. This is
+	// used with I²C.
 	// <op>, <ADBus pins>, <ACBus pins>
 	dataTristate byte = 0x9E
 
@@ -177,9 +177,6 @@ func (d *device) setupMPSSE() error {
 		if err := d.setupCommon(); err != nil {
 			return err
 		}
-		if err := d.setBitMode(0, bitModeReset); err != nil {
-			return err
-		}
 		if err := d.setBitMode(0, bitModeMpsse); err != nil {
 			return err
 		}
@@ -209,17 +206,38 @@ func (d *device) setupMPSSE() error {
 //
 // In practice this takes around 2ms.
 func (d *device) mpsseVerify() error {
+	var b [16]byte
 	for _, v := range []byte{0xAA, 0xAB} {
 		// Write a bad command and ensure it returned correctly.
 		// Unlike what the application note proposes, include a flush op right
 		// after. Without the flush, the device will only flush after the delay
 		// specified to SetLatencyTimer. The flush removes this unneeded wait,
 		// which enables increasing the delay specified to SetLatencyTimer.
-		if err := d.writeAll([]byte{v, flush}); err != nil {
+		b[0] = v
+		b[1] = flush
+		if err := d.writeAll(b[:2]); err != nil {
 			return fmt.Errorf("d2xx: mpsseVerify: %v", err)
 		}
-		var b [2]byte
-		if err := d.readAll(b[:]); err != nil {
+		// Sometimes, especially right after a reset, the device spews a few bytes.
+		// Discard them. This significantly increases the odds of a successful
+		// initialization.
+		p, e := d.h.d2xxGetQueueStatus()
+		if e != 0 {
+			return toErr("Read/GetQueueStatus", e)
+		}
+		for p > 2 {
+			l := int(p) - 2
+			if l > len(b) {
+				l = len(b)
+			}
+			// Discard the overflow bytes.
+			if err := d.readAll(b[:l]); err != nil {
+				return fmt.Errorf("d2xx: mpsseVerify: %v", err)
+			}
+			p -= uint32(l)
+		}
+		// Custom implementation, as we want to flush any stray byte.
+		if err := d.readAll(b[:2]); err != nil {
 			return fmt.Errorf("d2xx: mpsseVerify: %v", err)
 		}
 		// 0xFA means invalid command, 0xAA is the command echoed back.

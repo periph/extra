@@ -23,7 +23,7 @@ func TestDriver(t *testing.T) {
 			d:    ftdi.FT232R,
 			vid:  0x0403,
 			pid:  0x6014,
-			data: []byte{0},
+			data: [][]byte{{}, {0}},
 		}
 		return d, 0
 	}
@@ -38,7 +38,7 @@ type d2xxFakeHandle struct {
 	d    ftdi.DevType
 	vid  uint16
 	pid  uint16
-	data []byte
+	data [][]byte
 	ua   []byte
 	e    ftdi.EEPROM
 }
@@ -97,18 +97,33 @@ func (d *d2xxFakeHandle) d2xxSetBaudRate(hz uint32) int {
 	return 0
 }
 func (d *d2xxFakeHandle) d2xxGetQueueStatus() (uint32, int) {
-	return uint32(len(d.data)), 0
+	if len(d.data) == 0 {
+		return 0, 0
+	}
+	// This is to work around flushPending().
+	l := len(d.data[0])
+	if l == 0 {
+		d.data = d.data[1:]
+	}
+	return uint32(l), 0
 }
 func (d *d2xxFakeHandle) d2xxRead(b []byte) (int, int) {
+	if len(d.data) == 0 {
+		return 0, 0
+	}
 	l := len(b)
-	if j := len(d.data); j < l {
+	if j := len(d.data[0]); j < l {
 		l = j
 	}
 	if l == 0 {
+		d.data = d.data[1:]
 		return 0, 0
 	}
-	copy(b, d.data)
-	d.data = d.data[l:]
+	copy(b, d.data[0])
+	d.data[0] = d.data[0][l:]
+	if len(d.data[0]) == 0 {
+		d.data = d.data[1:]
+	}
 	return l, 0
 }
 func (d *d2xxFakeHandle) d2xxWrite(b []byte) (int, int) {
