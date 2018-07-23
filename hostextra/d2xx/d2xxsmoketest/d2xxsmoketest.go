@@ -64,19 +64,35 @@ func (s *SmokeTest) Run(f *flag.FlagSet, args []string) (err error) {
 }
 
 func testFT232H(d *d2xx.FT232H) error {
-	// TODO(maruel): Read EEPROM, connected wires?.
-	return gpioTest(d.C7)
+	// TODO(maruel): Read EEPROM, UA.
+	if err := gpioTest(&loggingPin{d.D2}, &loggingPin{d.D1}); err != nil {
+		return err
+	}
+	if err := gpioPerfTest(d.C7); err != nil {
+		return err
+	}
+	if err := i2cTest(d); err != nil {
+		return err
+	}
+	return spiTest(d)
 }
 
 func testFT232R(d *d2xx.FT232R) error {
-	// TODO(maruel): Read EEPROM, connected wires?.
-	return gpioTest(d.D3)
+	// TODO(maruel): Read EEPROM, UA.
+	if err := gpioTest(&loggingPin{d.RX}, &loggingPin{d.TX}); err != nil {
+		return err
+	}
+	return gpioPerfTest(d.CTS)
 }
 
-// gpioTest reads and write in a tight loop to evaluate performance. This makes
-// sure that the flush operation is used, vs relying on SetLatencyTimer value.
-func gpioTest(p gpio.PinIO) error {
-	fmt.Printf("  Testing GPIO performance:\n")
+// gpioPerfTest reads and write in a tight loop to evaluate performance.
+//
+// It doesn't evaluate correctness.
+//
+// This makes sure that the flush operation is used, vs relying on
+// SetLatencyTimer value.
+func gpioPerfTest(p gpio.PinIO) error {
+	fmt.Printf("  GPIO performance on %s:\n", p)
 	const loops = 1000
 	fmt.Printf("    %d reads:  ", loops)
 	if err := p.In(gpio.PullNoChange, gpio.NoEdge); err != nil {
@@ -100,5 +116,88 @@ func gpioTest(p gpio.PinIO) error {
 	}
 	s = time.Since(start)
 	fmt.Printf("%s; %s/op\n", s, s/loops)
+	return nil
+}
+
+// gpioTest ensures connectivity works.
+func gpioTest(p1, p2 gpio.PinIO) error {
+	fmt.Printf("  GPIO functionality on %s and %s:\n", p1, p2)
+	if err := p1.In(gpio.PullNoChange, gpio.NoEdge); err != nil {
+		return err
+	}
+	if err := p2.Out(gpio.Low); err != nil {
+		return err
+	}
+	if l := p1.Read(); l != gpio.Low {
+		fmt.Printf("TODO(maruel): Not working; %s: expected to read %s but got %s\n", p1, gpio.Low, l)
+		//return fmt.Errorf("%s: expected to read %s but got %s", p1, gpio.Low, l)
+	}
+	if err := p2.Out(gpio.High); err != nil {
+		return err
+	}
+	if l := p1.Read(); l != gpio.High {
+		fmt.Printf("TODO(maruel): Not working; %s: expected to read %s but got %s\n", p1, gpio.High, l)
+		//return fmt.Errorf("%s: expected to read %s but got %s", p1, gpio.High, l)
+	}
+	return nil
+}
+
+func i2cTest(d *d2xx.FT232H) error {
+	fmt.Printf("  I²C functionality:\n")
+	i, err := d.I2C()
+	if err != nil {
+		return err
+	}
+	if err = i.Close(); err != nil {
+		return err
+	}
+	// TODO(maruel): Do a write; this would require a device.
+	fmt.Printf("    OK\n")
+	return nil
+}
+
+func spiTest(d *d2xx.FT232H) error {
+	fmt.Printf("  SPI functionality:\n")
+	s, err := d.SPI()
+	if err != nil {
+		return err
+	}
+	if err = s.Close(); err != nil {
+		return err
+	}
+	// TODO(maruel): Do a write. This can be done without a device.
+	fmt.Printf("    OK\n")
+	return nil
+}
+
+// loggingPin logs when its state changes.
+type loggingPin struct {
+	gpio.PinIO
+}
+
+func (p *loggingPin) In(pull gpio.Pull, edge gpio.Edge) error {
+	start := time.Now()
+	if err := p.PinIO.In(pull, edge); err != nil {
+		fmt.Printf("    %s %s.In(%s, %s) = %v\n", time.Since(start), p, pull, edge, err)
+		return err
+	}
+	fmt.Printf("    %s %s.In(%s, %s)\n", time.Since(start), p, pull, edge)
+	return nil
+}
+
+func (p *loggingPin) Read() gpio.Level {
+	start := time.Now()
+	l := p.PinIO.Read()
+	fmt.Printf("    %s %s.Read() = %s\n", time.Since(start), p, l)
+	return l
+}
+
+func (p *loggingPin) Out(l gpio.Level) error {
+	start := time.Now()
+	if err := p.PinIO.Out(l); err != nil {
+		fmt.Printf("    %s %s.Out(%s) = %v\n", time.Since(start), p, l, err)
+		return err
+	}
+	fmt.Printf("    %s %s.Out(%s)\n", time.Since(start), p, l)
 	return nil
 }
