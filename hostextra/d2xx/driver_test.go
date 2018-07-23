@@ -19,7 +19,13 @@ func TestDriver(t *testing.T) {
 		if i != 0 {
 			t.Fatalf("unexpected index %d", i)
 		}
-		return &d2xxFakeHandle{d: ftdi.FT232R, vid: 0x0403, pid: 0x6014}, 0
+		d := &d2xxFakeHandle{
+			d:    ftdi.FT232R,
+			vid:  0x0403,
+			pid:  0x6014,
+			data: []byte{0},
+		}
+		return d, 0
 	}
 	if b, err := drv.Init(); !b || err != nil {
 		t.Fatalf("Init() = %t, %v", b, err)
@@ -29,11 +35,12 @@ func TestDriver(t *testing.T) {
 //
 
 type d2xxFakeHandle struct {
-	d   ftdi.DevType
-	vid uint16
-	pid uint16
-	ua  []byte
-	e   ftdi.EEPROM
+	d    ftdi.DevType
+	vid  uint16
+	pid  uint16
+	data []byte
+	ua   []byte
+	e    ftdi.EEPROM
 }
 
 func (d *d2xxFakeHandle) d2xxClose() int {
@@ -90,10 +97,19 @@ func (d *d2xxFakeHandle) d2xxSetBaudRate(hz uint32) int {
 	return 0
 }
 func (d *d2xxFakeHandle) d2xxGetQueueStatus() (uint32, int) {
-	return 0, 0
+	return uint32(len(d.data)), 0
 }
 func (d *d2xxFakeHandle) d2xxRead(b []byte) (int, int) {
-	return 0, 0
+	l := len(b)
+	if j := len(d.data); j < l {
+		l = j
+	}
+	if l == 0 {
+		return 0, 0
+	}
+	copy(b, d.data)
+	d.data = d.data[l:]
+	return l, 0
 }
 func (d *d2xxFakeHandle) d2xxWrite(b []byte) (int, int) {
 	return 0, 0
