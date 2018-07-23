@@ -10,8 +10,10 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"time"
 
 	"periph.io/x/extra/hostextra/d2xx"
+	"periph.io/x/periph/conn/gpio"
 )
 
 // SmokeTest is imported by extra-smoketest.
@@ -62,11 +64,41 @@ func (s *SmokeTest) Run(f *flag.FlagSet, args []string) (err error) {
 }
 
 func testFT232H(d *d2xx.FT232H) error {
-	// TODO(maruel): Assert registries, connected wires?.
-	return nil
+	// TODO(maruel): Read EEPROM, connected wires?.
+	return gpioTest(d.C7)
 }
 
 func testFT232R(d *d2xx.FT232R) error {
-	// TODO(maruel): Assert registries, connected wires?.
+	// TODO(maruel): Read EEPROM, connected wires?.
+	return gpioTest(d.D3)
+}
+
+// gpioTest reads and write in a tight loop to evaluate performance. This makes
+// sure that the flush operation is used, vs relying on SetLatencyTimer value.
+func gpioTest(p gpio.PinIO) error {
+	fmt.Printf("  Testing GPIO performance:\n")
+	const loops = 1000
+	fmt.Printf("    %d reads:  ", loops)
+	if err := p.In(gpio.PullNoChange, gpio.NoEdge); err != nil {
+		return err
+	}
+	start := time.Now()
+	for i := 0; i < loops; i++ {
+		p.Read()
+	}
+	s := time.Since(start)
+	fmt.Printf("%s; %s/op\n", s, s/loops)
+	fmt.Printf("    %d writes: ", loops)
+	if err := p.Out(gpio.Low); err != nil {
+		return err
+	}
+	start = time.Now()
+	for i := 0; i < loops; i++ {
+		if err := p.Out(gpio.Low); err != nil {
+			return err
+		}
+	}
+	s = time.Since(start)
+	fmt.Printf("%s; %s/op\n", s, s/loops)
 	return nil
 }
