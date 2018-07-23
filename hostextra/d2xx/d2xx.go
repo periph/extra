@@ -26,6 +26,7 @@ package d2xx
 import (
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"strconv"
 	"time"
@@ -160,16 +161,7 @@ func (d *device) read(b []byte) (int, error) {
 	// TODO(maruel): This asks for more perf testing before settling on the best
 	// solution.
 	// TODO(maruel): Investigate FT_GetStatus().
-	// TODO(maruel): Use FT_SetEventNotification() instead of looping when
-	// waiting for bytes.
-	p := uint32(0)
-	e := 0
-	for i := 0; i < 3; i++ {
-		// The FT232R is quite finicky.
-		if p, e = d.h.d2xxGetQueueStatus(); p != 0 && e == 0 {
-			break
-		}
-	}
+	p, e := d.h.d2xxGetQueueStatus()
 	if p == 0 || e != 0 {
 		return int(p), toErr("Read/GetQueueStatus", e)
 	}
@@ -181,6 +173,30 @@ func (d *device) read(b []byte) (int, error) {
 	return n, toErr("Read", e)
 }
 
+// readAll blocks to return all the data.
+func (d *device) readAll(b []byte) error {
+	// TODO(maruel): Use FT_SetEventNotification() instead of looping when
+	// waiting for bytes.
+	last := time.Now()
+	for offset := 0; offset != len(b); {
+		chunk := len(b) - offset
+		if chunk > 4096 {
+			chunk = 4096
+		}
+		p, err := d.read(b[offset : offset+chunk])
+		if err != nil {
+			return err
+		}
+		if p != 0 {
+			offset += p
+			last = time.Now()
+		} else if time.Since(last) > 200*time.Millisecond {
+			return io.EOF
+		}
+	}
+	return nil
+}
+
 // write writes to the USB device.
 //
 // In practice this takes at least 0.1ms, which limits the effective rate.
@@ -188,6 +204,24 @@ func (d *device) write(b []byte) (int, error) {
 	// Use a stronger guarantee that all bytes have been written.
 	n, e := d.h.d2xxWrite(b)
 	return n, toErr("Write", e)
+}
+
+// writeAll blocks until all data is written.
+func (d *device) writeAll(b []byte) error {
+	for offset := 0; offset != len(b); {
+		chunk := len(b) - offset
+		if chunk > 4096 {
+			chunk = 4096
+		}
+		p, err := d.write(b[offset : offset+chunk])
+		if err != nil {
+			return err
+		}
+		if p != 0 {
+			offset += p
+		}
+	}
+	return nil
 }
 
 func (d *device) readEEPROM(ee *ftdi.EEPROM) error {

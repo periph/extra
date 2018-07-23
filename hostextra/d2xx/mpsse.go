@@ -197,7 +197,7 @@ func (d *device) setupMPSSE() error {
 		gpioSetC, 0x00, 0x00,
 		gpioSetD, 0x00, 0x00,
 	}
-	if _, err := d.write(cmd); err != nil {
+	if err := d.writeAll(cmd); err != nil {
 		return err
 	}
 	// Success!!
@@ -215,30 +215,16 @@ func (d *device) mpsseVerify() error {
 		// after. Without the flush, the device will only flush after the delay
 		// specified to SetLatencyTimer. The flush removes this unneeded wait,
 		// which enables increasing the delay specified to SetLatencyTimer.
-		if _, err := d.write([]byte{v, flush}); err != nil {
+		if err := d.writeAll([]byte{v, flush}); err != nil {
 			return fmt.Errorf("d2xx: mpsseVerify: %v", err)
 		}
-		// Try for 50ms.
 		var b [2]byte
-		success := false
-		for start := time.Now(); time.Since(start) < 50*time.Millisecond; {
-			if n, err := d.read(b[:]); err != nil {
-				return fmt.Errorf("d2xx: mpsseVerify: %v", err)
-			} else if n == 0 {
-				// Slow down the busy loop a little.
-				// TODO(maruel): Use FT_SetEventNotification().
-				time.Sleep(10 * time.Microsecond)
-				continue
-			}
-			// 0xFA means invalid command, 0xAA is the command echoed back.
-			if b[0] != 0xFA || b[1] != v {
-				return fmt.Errorf("d2xx: mpsseVerify: failed test for byte %#x: %#x", v, b)
-			}
-			success = true
-			break
+		if err := d.readAll(b[:]); err != nil {
+			return fmt.Errorf("d2xx: mpsseVerify: %v", err)
 		}
-		if !success {
-			return fmt.Errorf("d2xx: mpsseVerify: failed test for byte %#x", v)
+		// 0xFA means invalid command, 0xAA is the command echoed back.
+		if b[0] != 0xFA || b[1] != v {
+			return fmt.Errorf("d2xx: mpsseVerify: failed test for byte %#x: %#x", v, b)
 		}
 	}
 	return nil
@@ -250,10 +236,10 @@ func (d *device) mpsseVerify() error {
 func (d *device) mpsseRegRead(addr uint16) (byte, error) {
 	// Unlike most other operations, the uint16 byte order is <hi>, <lo>.
 	b := [...]byte{cpuReadFar, byte(addr >> 8), byte(addr), flush}
-	if _, err := d.write(b[:]); err != nil {
+	if err := d.writeAll(b[:]); err != nil {
 		return 0, err
 	}
-	_, err := d.read(b[:1])
+	err := d.readAll(b[:1])
 	return b[0], err
 }
 
@@ -272,8 +258,7 @@ func (d *device) mpsseClock(f physic.Frequency) (physic.Frequency, error) {
 		}
 	}
 	b := [...]byte{clk, clockSetDivisor, byte(div - 1), byte((div - 1) >> 8)}
-	_, err := d.write(b[:])
-	return base / div, err
+	return base / div, d.writeAll(b[:])
 }
 
 // mpsseTxOp returns the right MPSSE command byte for the stream.
@@ -327,11 +312,11 @@ func (d *device) mpsseTx(w, r []byte, ew, er gpio.Edge, lsbf bool) error {
 	if len(r) != 0 {
 		cmd = append(cmd, flush)
 	}
-	if _, err := d.write(cmd); err != nil {
+	if err := d.writeAll(cmd); err != nil {
 		return err
 	}
 	if len(r) != 0 {
-		_, err := d.read(r)
+		err := d.readAll(r)
 		return err
 	}
 	return nil
@@ -375,11 +360,11 @@ func (d *device) mpsseTxShort(w byte, wbits, rbits int, ew, er gpio.Edge, lsbf b
 	if rbits != 0 {
 		cmd = append(cmd, flush)
 	}
-	if _, err := d.write(cmd); err != nil {
+	if err := d.writeAll(cmd); err != nil {
 		return 0, err
 	}
 	if rbits != 0 {
-		_, err := d.read(b[:1])
+		err := d.readAll(b[:1])
 		return b[0], err
 	}
 	return 0, nil
@@ -387,8 +372,7 @@ func (d *device) mpsseTxShort(w byte, wbits, rbits int, ew, er gpio.Edge, lsbf b
 
 func (d *device) mpsseCBus(mask, value byte) error {
 	b := [...]byte{gpioSetC, value, mask}
-	_, err := d.write(b[:])
-	return err
+	return d.writeAll(b[:])
 }
 
 // mpsseDBus operates on 8 GPIOs at a time D0~D7.
@@ -396,16 +380,15 @@ func (d *device) mpsseCBus(mask, value byte) error {
 // Direction 1 means output, 0 means input.
 func (d *device) mpsseDBus(mask, value byte) error {
 	b := [...]byte{gpioSetD, value, mask}
-	_, err := d.write(b[:])
-	return err
+	return d.writeAll(b[:])
 }
 
 func (d *device) mpsseCBusRead() (byte, error) {
 	b := [...]byte{gpioReadC, flush}
-	if _, err := d.write(b[:]); err != nil {
+	if err := d.writeAll(b[:]); err != nil {
 		return 0, err
 	}
-	if _, err := d.read(b[:1]); err != nil {
+	if err := d.readAll(b[:1]); err != nil {
 		return 0, err
 	}
 	return b[0], nil
@@ -413,10 +396,10 @@ func (d *device) mpsseCBusRead() (byte, error) {
 
 func (d *device) mpsseDBusRead() (byte, error) {
 	b := [...]byte{gpioReadD, flush}
-	if _, err := d.write(b[:]); err != nil {
+	if err := d.writeAll(b[:]); err != nil {
 		return 0, err
 	}
-	if _, err := d.read(b[:1]); err != nil {
+	if err := d.readAll(b[:1]); err != nil {
 		return 0, err
 	}
 	return b[0], nil

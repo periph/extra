@@ -112,7 +112,7 @@ func (d *i2cBus) setupI2C() error {
 		dataTristate, 0x07, 0x00,
 		clock30MHz, byte(clk), byte(clk >> 8),
 	}
-	if _, err := d.f.h.write(cmd[:]); err != nil {
+	if err := d.f.h.writeAll(cmd[:]); err != nil {
 		return err
 	}
 	d.f.usingI2C = true
@@ -126,7 +126,7 @@ func (d *i2cBus) stopI2C() error {
 		dataTristate, 0x00, 0x00,
 		clock30MHz, 0, 0,
 	}
-	_, err := d.f.h.write(cmd[:])
+	err := d.f.h.writeAll(cmd[:])
 	d.f.usingI2C = false
 	return err
 }
@@ -134,8 +134,7 @@ func (d *i2cBus) stopI2C() error {
 // setI2CLinesIdle sets all D0~D7 lines high.
 func (d *i2cBus) setI2CLinesIdle() error {
 	cmd := [...]byte{gpioSetD, 0xFF, 0xFB}
-	_, err := d.f.h.write(cmd[:])
-	return err
+	return d.f.h.writeAll(cmd[:])
 }
 
 func (d *i2cBus) setI2CStart() error {
@@ -152,8 +151,7 @@ func (d *i2cBus) setI2CStart() error {
 		gpioSetD, 0xFC, 0xFB,
 		gpioSetD, 0xFC, 0xFB,
 	}
-	_, err := d.f.h.write(cmd[:])
-	return err
+	return d.f.h.writeAll(cmd[:])
 }
 
 func (d *i2cBus) setI2CStop() error {
@@ -175,8 +173,7 @@ func (d *i2cBus) setI2CStop() error {
 		gpioSetD, 0xFF, 0xFB,
 		gpioSetD, 0xFF, 0xFB,
 	}
-	_, err := d.f.h.write(cmd[:])
-	return err
+	return d.f.h.writeAll(cmd[:])
 }
 
 func (d *i2cBus) writeBytes(w []byte) error {
@@ -189,10 +186,10 @@ func (d *i2cBus) writeBytes(w []byte) error {
 			dataIn | dataBit, 0x00,
 			flush,
 		}
-		if _, err := d.f.h.write(cmd[:]); err != nil {
+		if err := d.f.h.writeAll(cmd[:]); err != nil {
 			return err
 		}
-		if _, err := d.f.h.read(r[:]); err != nil {
+		if err := d.f.h.readAll(r[:]); err != nil {
 			return err
 		}
 		if r[0]&1 == 0 {
@@ -218,11 +215,10 @@ func (d *i2cBus) readBytes(r []byte) error {
 			// Force read buffer flush. This is only necessary if NAK are not ignored.
 			flush,
 		}
-		if _, err := d.f.h.write(cmd[:]); err != nil {
+		if err := d.f.h.writeAll(cmd[:]); err != nil {
 			return err
 		}
-		// TODO(maruel): Create a buffer version.
-		if _, err := d.f.h.read(r[i:1]); err != nil {
+		if err := d.f.h.readAll(r[i:1]); err != nil {
 			return err
 		}
 	}

@@ -479,7 +479,7 @@ func newFT232R(g generic) (*FT232R, error) {
 	}
 	// And read their value.
 	var b [1]byte
-	if _, err := f.h.read(b[:]); err != nil {
+	if err := f.h.readAll(b[:]); err != nil {
 		return nil, err
 	}
 	f.dvalue = b[0]
@@ -641,10 +641,10 @@ func (f *FT232R) txLocked(w, r []byte) error {
 			if c > chunk {
 				c = chunk
 			}
-			if _, err := f.h.write(scratch[:c]); err != nil {
+			if err := f.h.writeAll(scratch[:c]); err != nil {
 				return err
 			}
-			if _, err := f.h.read(r[:c]); err != nil {
+			if err := f.h.readAll(r[:c]); err != nil {
 				return err
 			}
 			r = r[c:]
@@ -658,7 +658,7 @@ func (f *FT232R) txLocked(w, r []byte) error {
 			if c > chunk {
 				c = chunk
 			}
-			if _, err := f.h.write(w[:c]); err != nil {
+			if err := f.h.writeAll(w[:c]); err != nil {
 				return err
 			}
 			w = w[c:]
@@ -666,7 +666,7 @@ func (f *FT232R) txLocked(w, r []byte) error {
 		}
 		/*
 			// Let the USB drive pace it.
-			if _, err := f.h.write(w); err != nil {
+			if err := f.h.writeAll(w); err != nil {
 				return err
 			}
 		*/
@@ -679,7 +679,7 @@ func (f *FT232R) txLocked(w, r []byte) error {
 		if cw > chunk {
 			cw = chunk
 		}
-		if _, err := f.h.write(w[:cw]); err != nil {
+		if err := f.h.writeAll(w[:cw]); err != nil {
 			return err
 		}
 		w = w[cw:]
@@ -690,7 +690,7 @@ func (f *FT232R) txLocked(w, r []byte) error {
 			if cr > chunk {
 				cr = chunk
 			}
-			if _, err := f.h.read(r[:cr]); err != nil {
+			if err := f.h.readAll(r[:cr]); err != nil {
 				return err
 			}
 			r = r[cr:]
@@ -700,7 +700,7 @@ func (f *FT232R) txLocked(w, r []byte) error {
 				cw = chunk
 			}
 			if cw != 0 {
-				if _, err := f.h.write(w[:cw]); err != nil {
+				if err := f.h.writeAll(w[:cw]); err != nil {
 					return err
 				}
 				w = w[cw:]
@@ -762,11 +762,11 @@ func (f *FT232R) dbusSyncGPIORead(n int) gpio.Level {
 func (f *FT232R) dbusSyncReadLocked(n int) gpio.Level {
 	// In synchronous mode, to read we must write first to for a sample.
 	b := [1]byte{f.dvalue}
-	if _, err := f.h.write(b[:]); err != nil {
+	if err := f.h.writeAll(b[:]); err != nil {
 		return gpio.Low
 	}
 	mask := uint8(1 << uint(n))
-	if _, err := f.h.read(b[:]); err != nil {
+	if err := f.h.readAll(b[:]); err != nil {
 		return gpio.Low
 	}
 	f.dvalue = b[0]
@@ -791,12 +791,12 @@ func (f *FT232R) dbusSyncGPIOOut(n int, l gpio.Level) error {
 
 func (f *FT232R) dbusSyncGPIOOutLocked(n int, l gpio.Level) error {
 	b := [1]byte{f.dvalue}
-	if _, err := f.h.write(b[:]); err != nil {
+	if err := f.h.writeAll(b[:]); err != nil {
 		return err
 	}
 	f.dvalue = b[0]
 	// In synchronous mode, we must read after writing to flush the buffer.
-	if _, err := f.h.write(b[:]); err != nil {
+	if err := f.h.writeAll(b[:]); err != nil {
 		return err
 	}
 	return nil
