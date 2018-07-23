@@ -249,7 +249,7 @@ func (d *device) mpsseVerify() error {
 // mpsseRegRead reads the memory mapped registers from the device.
 func (d *device) mpsseRegRead(addr uint16) (byte, error) {
 	// Unlike most other operations, the uint16 byte order is <hi>, <lo>.
-	b := [...]byte{cpuReadFar, byte(addr >> 8), byte(addr)}
+	b := [...]byte{cpuReadFar, byte(addr >> 8), byte(addr), flush}
 	if _, err := d.write(b[:]); err != nil {
 		return 0, err
 	}
@@ -323,7 +323,11 @@ func (d *device) mpsseTx(w, r []byte, ew, er gpio.Edge, lsbf bool) error {
 	// flushBuffer can be useful if rbits != 0.
 	op := mpsseTxOp(len(w) != 0, len(r) != 0, ew, er, lsbf)
 	cmd := []byte{op, byte(l - 1), byte((l - 1) >> 8)}
-	if _, err := d.write(append(cmd, w...)); err != nil {
+	cmd = append(cmd, w...)
+	if len(r) != 0 {
+		cmd = append(cmd, flush)
+	}
+	if _, err := d.write(cmd); err != nil {
 		return err
 	}
 	if len(r) != 0 {
@@ -368,6 +372,9 @@ func (d *device) mpsseTxShort(w byte, wbits, rbits int, ew, er gpio.Edge, lsbf b
 	if wbits != 0 {
 		cmd = append(cmd, w)
 	}
+	if rbits != 0 {
+		cmd = append(cmd, flush)
+	}
 	if _, err := d.write(cmd); err != nil {
 		return 0, err
 	}
@@ -394,7 +401,7 @@ func (d *device) mpsseDBus(mask, value byte) error {
 }
 
 func (d *device) mpsseCBusRead() (byte, error) {
-	b := [...]byte{gpioReadC}
+	b := [...]byte{gpioReadC, flush}
 	if _, err := d.write(b[:]); err != nil {
 		return 0, err
 	}
@@ -405,7 +412,7 @@ func (d *device) mpsseCBusRead() (byte, error) {
 }
 
 func (d *device) mpsseDBusRead() (byte, error) {
-	b := [...]byte{gpioReadD}
+	b := [...]byte{gpioReadD, flush}
 	if _, err := d.write(b[:]); err != nil {
 		return 0, err
 	}
