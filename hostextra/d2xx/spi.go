@@ -264,9 +264,6 @@ func (s *spiMPSEEConn) TxPackets(pkts []spi.Packet) error {
 			if l := len(p.W); chunk > l {
 				chunk = l
 			}
-			if chunk == 0 {
-				panic("remove me")
-			}
 			cmd = append(cmd, op, byte(chunk-1), byte((chunk-1)>>8))
 			cmd = append(cmd, p.W[:chunk]...)
 			p.W = p.W[chunk:]

@@ -215,10 +215,6 @@ func newFT232H(g generic) (*FT232H, error) {
 	}
 	f.cbus.init(f.name)
 	f.dbus.init(f.name)
-	f.dbus.pins[0].dp = gpio.Float
-	f.dbus.pins[2].dp = gpio.Float
-	f.dbus.pins[4].dp = gpio.Float
-	f.cbus.pins[7].dp = gpio.PullDown
 
 	for i := range f.dbus.pins {
 		f.hdr[i] = &f.dbus.pins[i]

@@ -444,11 +444,20 @@ func (g *gpiosMPSSE) init(name string) {
 	if g.cbus {
 		s = "C"
 	}
+	// Configure pulls; pull ups are 75kΩ.
+	// http://www.ftdichip.com/Support/Documents/AppNotes/AN_184%20FTDI%20Device%20Input%20Output%20Pin%20States.pdf
+	// has a good table.
+	// D0, D2 and D4 go in high impedence before going into pull up.
+	// TODO(maruel): The pull on CBus depends on EEPROM!
 	for i := range g.pins {
 		g.pins[i].a = g
 		g.pins[i].n = name + "." + s + strconv.Itoa(i)
 		g.pins[i].num = i
 		g.pins[i].dp = gpio.PullUp
+	}
+	if g.cbus {
+		// That's just the default EEPROM value.
+		g.pins[7].dp = gpio.PullDown
 	}
 }
 
@@ -543,10 +552,14 @@ func (g *gpioMPSSE) In(pull gpio.Pull, e gpio.Edge) error {
 		// We could support it on D5.
 		return errors.New("d2xx: edge triggering is not supported")
 	}
-	if pull != gpio.Float && pull != gpio.PullNoChange {
-		// In tristate, we can only pull up.
-		// EEPROM has a PullDownEnable flag.
-		return errors.New("d2xx: pull is not supported")
+	if pull != g.dp && pull != gpio.PullNoChange {
+		// TODO(maruel): This needs to be redone:
+		// - EEPROM values FT232hCBusTristatePullUp and FT232hCBusPwrEnable can be
+		//   used to control individual CBus pins.
+		// - dataTristate enables gpio.Float when set to output High, but I don't
+		//   know if it will enable reading the value (?). This needs to be
+		//   confirmed.
+		return fmt.Errorf("d2xx: pull %s is not supported; try %s", pull, g.dp)
 	}
 	return g.a.in(g.num)
 }
@@ -567,9 +580,10 @@ func (g *gpioMPSSE) DefaultPull() gpio.Pull {
 	return g.dp
 }
 
-// Pull implements gpio.PinIn.
+// Pull implements gpio.PinIn. The resistor is 75kΩ.
 func (g *gpioMPSSE) Pull() gpio.Pull {
-	return gpio.PullNoChange
+	// See In() for the challenges.
+	return g.dp
 }
 
 // Out implements gpio.PinOut.
