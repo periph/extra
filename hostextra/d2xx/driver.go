@@ -10,7 +10,9 @@ import (
 
 	"periph.io/x/extra/hostextra/d2xx/ftdi"
 	"periph.io/x/periph"
+	"periph.io/x/periph/conn/gpio"
 	"periph.io/x/periph/conn/gpio/gpioreg"
+	"periph.io/x/periph/conn/i2c"
 	"periph.io/x/periph/conn/i2c/i2creg"
 	"periph.io/x/periph/conn/pin"
 	"periph.io/x/periph/conn/pin/pinreg"
@@ -112,7 +114,8 @@ func registerDev(d Dev, multi bool) error {
 	}
 	switch t := d.(type) {
 	case *FT232H:
-		if err := i2creg.Register(name, nil, -1, t.I2C); err != nil {
+		// Register I²C without pull up.
+		if err := i2creg.Register(name, nil, -1, func() (i2c.BusCloser, error) { return t.I2C(gpio.Float) }); err != nil {
 			return err
 		}
 		if err := spireg.Register(name, nil, -1, t.SPI); err != nil {

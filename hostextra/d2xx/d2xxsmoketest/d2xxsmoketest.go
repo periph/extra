@@ -151,7 +151,7 @@ func gpioTest(p1, p2 gpio.PinIO, broken bool) error {
 
 func i2cTest(d *d2xx.FT232H) error {
 	fmt.Printf("  I²C functionality:\n")
-	i, err := d.I2C()
+	i, err := d.I2C(gpio.Float)
 	if err != nil {
 		return err
 	}

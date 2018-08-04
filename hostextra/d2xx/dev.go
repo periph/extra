@@ -360,14 +360,17 @@ func (f *FT232H) DBusRead() (byte, error) {
 
 // I2C returns an I²C bus over the AD bus.
 //
+// pull can be either gpio.PullUp or gpio.Float. The recommended pull up
+// resistors are 10kΩ for 100kHz and 2kΩ for 400kHz when using Float. The
+// GPIO's pull up is 75kΩ, which may require using a lower speed for signal
+// reliability. Optimal pull up resistor calculation depends on the capacitance.
+//
 // It uses D0, D1 and D2.
 //
 // D0 is SCL. It must to be pulled up externally.
 //
 // D1 and D2 are used for SDA. D1 is the output using open drain, D2 is the
 // input. D1 and D2 must be wired together and must be pulled up externally.
-//
-// The recommended pull up resistors are 10kΩ for 100kHz and 2kΩ for 400kHz.
 //
 // It is recommended to set the mode to ‘245 FIFO’ in the EEPROM of the FT232H.
 //
@@ -377,7 +380,10 @@ func (f *FT232H) DBusRead() (byte, error) {
 // and configures it as MPSSE. Care should also be taken that the RD# input on
 // ACBUS is not asserted in this initial state as this can cause the FIFO lines
 // to drive out.
-func (f *FT232H) I2C() (i2c.BusCloser, error) {
+func (f *FT232H) I2C(pull gpio.Pull) (i2c.BusCloser, error) {
+	if pull != gpio.PullUp && pull != gpio.Float {
+		return nil, errors.New("d2xx: I²C pull can only be PullUp or Float")
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.usingI2C {
@@ -386,7 +392,7 @@ func (f *FT232H) I2C() (i2c.BusCloser, error) {
 	if f.usingSPI {
 		return nil, errors.New("d2xx: already using SPI")
 	}
-	if err := f.i.setupI2C(); err != nil {
+	if err := f.i.setupI2C(pull == gpio.PullUp); err != nil {
 		f.i.stopI2C()
 		return nil, err
 	}

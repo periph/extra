@@ -24,8 +24,13 @@ import (
 	"periph.io/x/periph/conn/physic"
 )
 
+const i2cSCL = 1    // D0
+const i2cSDAOut = 2 // D1
+const i2cSDAIn = 4  // D2
+
 type i2cBus struct {
-	f *FT232H
+	f      *FT232H
+	pullUp bool
 }
 
 // Close stops I²C mode, returns to high speed mode, disable tri-state.
@@ -63,7 +68,6 @@ func (d *i2cBus) SetSpeed(f physic.Frequency) error {
 func (d *i2cBus) Tx(addr uint16, w, r []byte) error {
 	d.f.mu.Lock()
 	defer d.f.mu.Unlock()
-	// TODO(maruel): Merge these commands.
 	if err := d.setI2CStart(); err != nil {
 		return err
 	}
@@ -81,7 +85,6 @@ func (d *i2cBus) Tx(addr uint16, w, r []byte) error {
 			return err
 		}
 	}
-	// TODO(maruel): Merge these commands.
 	if err := d.setI2CStop(); err != nil {
 		return err
 	}
@@ -101,68 +104,71 @@ func (d *i2cBus) SDA() gpio.PinIO {
 // setupI2C initializes the MPSSE to the state to run an I²C transaction.
 //
 // Defaults to 400kHz.
-func (d *i2cBus) setupI2C() error {
+//
+// When pullUp is true; output alternates between Out(Low) and In(PullUp).
+//
+// when pullUp is false; pins are set in Tristate so Out(High) becomes float
+// instead of drive High. Low still drives low. That's called open collector.
+func (d *i2cBus) setupI2C(pullUp bool) error {
+	if pullUp {
+		return errors.New("d2xx: PullUp will soon be implemented")
+	}
 	// TODO(maruel): We could set these only *during* the I²C operation, which
 	// would make more sense.
 	f := 400 * physic.KiloHertz
 	clk := ((30 * physic.MegaHertz / f) - 1) * 2 / 3
-	const D0 = 1 // SCL
-	const D1 = 2 // SDA/Out
-	const D2 = 4 // SDA/In
-	// Tristate makes Out(High) to Float instead of drive High. Low still drives
-	// low. That's called open collector.
-	// For hardware which doesn't support tristate, one can alternate between
-	// Out(Low) and In(PullUp) which achieves the same effect.
-	//
-	// In practice, using In(PullUp) removes the need of an external pull up
-	// resistor, but the internal one is likely of too high value that it would
-	// not work well at high speed.
-	cmd := [...]byte{
+
+	buf := [4 + 3]byte{
 		clock3Phase,
-		dataTristate, 7, 0,
 		clock30MHz, byte(clk), byte(clk >> 8),
 	}
-	if err := d.f.h.writeAll(cmd[:]); err != nil {
+	cmd := buf[:4]
+	if !d.pullUp {
+		// TODO(maruel): Do not mess with other GPIOs tristate.
+		cmd = append(cmd, dataTristate, 7, 0)
+	}
+	if err := d.f.h.writeAll(cmd); err != nil {
 		return err
 	}
 	d.f.usingI2C = true
+	d.pullUp = pullUp
 	return d.setI2CLinesIdle()
 }
 
 // stopI2C resets the MPSSE to a more "normal" state.
 func (d *i2cBus) stopI2C() error {
 	// Resets to 30MHz.
-	cmd := [...]byte{
+	buf := [4 + 3]byte{
 		clock2Phase,
-		dataTristate, 0, 0,
 		clock30MHz, 0, 0,
 	}
-	err := d.f.h.writeAll(cmd[:])
+	cmd := buf[:4]
+	if !d.pullUp {
+		// TODO(maruel): Do not mess with other GPIOs tristate.
+		cmd = append(cmd, dataTristate, 0, 0)
+	}
+	err := d.f.h.writeAll(cmd)
 	d.f.usingI2C = false
 	return err
 }
 
 // setI2CLinesIdle sets all D0 and D1 lines high.
 //
-// Do not touch D3~D7.
+// Does not touch D3~D7.
 func (d *i2cBus) setI2CLinesIdle() error {
-	const D0 = 1 // SCL
-	const D1 = 2 // SDA/Out
-	const D2 = 4 // SDA/In
-	const mask = 0xFF &^ (D0 | D1 | D2)
-	d.f.dbus.direction = d.f.dbus.direction&mask | D0 | D1
+	const mask = 0xFF &^ (i2cSCL | i2cSDAOut | i2cSDAIn)
+	// TODO(maruel): d.pullUp
+	d.f.dbus.direction = d.f.dbus.direction&mask | i2cSCL | i2cSDAOut
 	d.f.dbus.value = d.f.dbus.value & mask
-	cmd := [...]byte{gpioSetD, d.f.dbus.value | D0 | D1, d.f.dbus.direction}
+	cmd := [...]byte{gpioSetD, d.f.dbus.value | i2cSCL | i2cSDAOut, d.f.dbus.direction}
 	return d.f.h.writeAll(cmd[:])
 }
 
 // setI2CStart starts an I²C transaction.
 //
-// Do not touch D3~D7.
+// Does not touch D3~D7.
 func (d *i2cBus) setI2CStart() error {
-	const D0 = 1 // SCL
-	const D1 = 2 // SDA/Out
-	const D2 = 4 // SDA/In
+	// TODO(maruel): d.pullUp
 	dir := d.f.dbus.direction
 	v := d.f.dbus.value
 	// Assumes last setup was d.setI2CLinesIdle(), e.g. D0 and D1 are high, so
@@ -171,10 +177,10 @@ func (d *i2cBus) setI2CStart() error {
 	// Runs the command 4 times as a way to delay execution.
 	cmd := [...]byte{
 		// SCL high, SDA low for 600ns
-		gpioSetD, v | D0, dir,
-		gpioSetD, v | D0, dir,
-		gpioSetD, v | D0, dir,
-		gpioSetD, v | D0, dir,
+		gpioSetD, v | i2cSCL, dir,
+		gpioSetD, v | i2cSCL, dir,
+		gpioSetD, v | i2cSCL, dir,
+		gpioSetD, v | i2cSCL, dir,
 		// SCL low, SDA low
 		gpioSetD, v, dir,
 		gpioSetD, v, dir,
@@ -185,11 +191,9 @@ func (d *i2cBus) setI2CStart() error {
 
 // setI2CStop completes an I²C transaction.
 //
-// Do not touch D3~D7.
+// Does not touch D3~D7.
 func (d *i2cBus) setI2CStop() error {
-	const D0 = 1 // SCL
-	const D1 = 2 // SDA/Out
-	const D2 = 4 // SDA/In
+	// TODO(maruel): d.pullUp
 	dir := d.f.dbus.direction
 	v := d.f.dbus.value
 	// Runs the command 4 times as a way to delay execution.
@@ -200,28 +204,27 @@ func (d *i2cBus) setI2CStop() error {
 		gpioSetD, v, dir,
 		gpioSetD, v, dir,
 		// SCL high, SDA low
-		gpioSetD, v | D0, dir,
-		gpioSetD, v | D0, dir,
-		gpioSetD, v | D0, dir,
-		gpioSetD, v | D0, dir,
+		gpioSetD, v | i2cSCL, dir,
+		gpioSetD, v | i2cSCL, dir,
+		gpioSetD, v | i2cSCL, dir,
+		gpioSetD, v | i2cSCL, dir,
 		// SCL high, SDA high
-		gpioSetD, v | D0 | D1, dir,
-		gpioSetD, v | D0 | D1, dir,
-		gpioSetD, v | D0 | D1, dir,
-		gpioSetD, v | D0 | D1, dir,
+		gpioSetD, v | i2cSCL | i2cSDAOut, dir,
+		gpioSetD, v | i2cSCL | i2cSDAOut, dir,
+		gpioSetD, v | i2cSCL | i2cSDAOut, dir,
+		gpioSetD, v | i2cSCL | i2cSDAOut, dir,
 	}
 	return d.f.h.writeAll(cmd[:])
 }
 
 // writeBytes writes multiple bytes within an I²C transaction.
 //
-// Do not touch D3~D7.
+// Does not touch D3~D7.
 func (d *i2cBus) writeBytes(w []byte) error {
-	const D0 = 1 // SCL
-	const D1 = 2 // SDA/Out
-	const D2 = 4 // SDA/In
+	// TODO(maruel): d.pullUp
 	dir := d.f.dbus.direction
 	v := d.f.dbus.value
+	// TODO(maruel): WAT?
 	if err := d.f.h.flushPending(); err != nil {
 		return err
 	}
@@ -231,7 +234,7 @@ func (d *i2cBus) writeBytes(w []byte) error {
 		// Data out, the 0 will be replaced with the byte.
 		dataOut | dataOutFall, 0, 0, 0,
 		// Set back to idle.
-		gpioSetD, v | D0 | D1, dir,
+		gpioSetD, v | i2cSCL | i2cSDAOut, dir,
 		// Read ACK/NAK.
 		dataIn | dataBit, 0,
 		flush,
@@ -253,11 +256,9 @@ func (d *i2cBus) writeBytes(w []byte) error {
 
 // readBytes reads multiple bytes within an I²C transaction.
 //
-// Do not touch D3~D7.
+// Does not touch D3~D7.
 func (d *i2cBus) readBytes(r []byte) error {
-	const D0 = 1 // SCL
-	const D1 = 2 // SDA/Out
-	const D2 = 4 // SDA/In
+	// TODO(maruel): d.pullUp
 	dir := d.f.dbus.direction
 	v := d.f.dbus.value
 
@@ -267,7 +268,7 @@ func (d *i2cBus) readBytes(r []byte) error {
 		// Send ACK/NAK.
 		dataOut | dataOutFall | dataBit, 0, 0,
 		// Set back to idle.
-		gpioSetD, v | D0 | D1, dir,
+		gpioSetD, v | i2cSCL | i2cSDAOut, dir,
 		// Force read buffer flush. This is only necessary if NAK are not ignored.
 		flush,
 	}
