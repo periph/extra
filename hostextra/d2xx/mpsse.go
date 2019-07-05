@@ -447,7 +447,7 @@ func (g *gpiosMPSSE) init(name string) {
 	// Configure pulls; pull ups are 75kΩ.
 	// http://www.ftdichip.com/Support/Documents/AppNotes/AN_184%20FTDI%20Device%20Input%20Output%20Pin%20States.pdf
 	// has a good table.
-	// D0, D2 and D4 go in high impedence before going into pull up.
+	// D0, D2 and D4 go in high impedance before going into pull up.
 	// TODO(maruel): The pull on CBus depends on EEPROM!
 	for i := range g.pins {
 		g.pins[i].a = g

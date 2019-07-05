@@ -158,7 +158,7 @@ func (d *driver) Init() (bool, error) {
 		// TODO(maruel): Close the device one day. :)
 		if dev, err1 := open(d.d2xxOpen, i); err1 == nil {
 			d.all = append(d.all, dev)
-			if err := registerDev(dev, multi); err != nil {
+			if err = registerDev(dev, multi); err != nil {
 				return true, err
 			}
 		} else {

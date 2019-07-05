@@ -98,7 +98,7 @@ func (d *device) setupCommon() error {
 		return toErr("SetUSBParameters", e)
 	}
 	// Driver: Set I/O timeouts to 15 sec. The reason is that we want the
-	// timeouts to be very visible, at least as the driver is being developped.
+	// timeouts to be very visible, at least as the driver is being developed.
 	if e := d.h.d2xxSetTimeouts(15000, 15000); e != 0 {
 		return toErr("SetTimeouts", e)
 	}

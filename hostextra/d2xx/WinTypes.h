@@ -121,7 +121,7 @@ typedef struct timeval FILETIME;
 #define EV_BREAK            0x0040  // BREAK received
 #define EV_ERR              0x0080  // Line status error occurred
 #define EV_RING             0x0100  // Ring signal detected
-#define EV_PERR             0x0200  // Printer error occured
+#define EV_PERR             0x0200  // Printer error occurred
 #define EV_RX80FULL         0x0400  // Receive buffer is 80 percent full
 #define EV_EVENT1           0x0800  // Provider specific event 1
 #define EV_EVENT2           0x1000  // Provider specific event 2
